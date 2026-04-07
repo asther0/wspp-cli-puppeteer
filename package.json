@@ -12,7 +12,9 @@
     "scrape": "bun run src/commands/scrape.ts",
     "search": "bun run src/commands/search.ts",
     "screenshot": "bun run src/commands/screenshot.ts",
-    "interact": "bun run src/commands/interact.ts"
+    "interact": "bun run src/commands/interact.ts",
+    "whatsapp": "bun run src/commands/whatsapp.ts",
+    "whatsapp:send": "bun run src/commands/whatsapp-send.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"

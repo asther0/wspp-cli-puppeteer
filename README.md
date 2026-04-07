@@ -46,6 +46,20 @@ Demuestra interacciones básicas con páginas web:
 bun run interact
 ```
 
+### 5. WhatsApp Web (wspp-cli) 🔥
+Automatiza WhatsApp Web - el origen del proyecto:
+```bash
+# Abrir WhatsApp Web y ver últimos chats
+bun run whatsapp
+
+# Enviar mensaje automático
+bun run whatsapp:send "Nombre del Contacto" "Tu mensaje aquí"
+```
+**Ejemplo:**
+```bash
+bun run whatsapp:send "Juan Pérez" "Hola! Este mensaje fue enviado con Puppeteer 🤖"
+```
+
 ## ⚙️ Configuración
 
 El navegador Chrome debe estar instalado en:
