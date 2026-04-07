@@ -10,6 +10,17 @@ bun install
 
 ## 🚀 Comandos Disponibles
 
+### 0. Demo Completo (Recomendado)
+Ejecuta una demostración completa con múltiples tareas:
+```bash
+bun run demo
+```
+**Incluye:**
+- ✓ Navegación a GitHub
+- ✓ Extracción de repos trending
+- ✓ Screenshot automático
+- ✓ Información del navegador
+
 ### 1. Web Scraping
 Extrae los repositorios trending de GitHub:
 ```bash
