@@ -38,38 +38,48 @@ async function whatsappDemo() {
 
     // Esperar que cargue la interfaz
     spinner.start("Cargando chats...");
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 5000));
 
     // Extraer información de chats
     const chatsInfo = await page.evaluate(() => {
-      const chatElements = document.querySelectorAll('div[role="listitem"]');
+      const chatElements = document.querySelectorAll('[data-testid^="cell-frame-container"]');
       const chats: Array<{ name: string; lastMessage: string }> = [];
 
       chatElements.forEach((chat, index) => {
         if (index >= 5) return; // Solo los primeros 5
 
-        const nameElement = chat.querySelector('span[dir="auto"][title]');
-        const messageElement = chat.querySelector('span.selectable-text');
+        // Buscar el nombre del chat
+        const nameElement = chat.querySelector('[data-testid^="cell-frame-title"]');
 
-        chats.push({
-          name: nameElement?.getAttribute("title") || "Sin nombre",
-          lastMessage:
-            messageElement?.textContent?.substring(0, 50) || "Sin mensajes",
-        });
+        // Buscar el último mensaje
+        const messageElement = chat.querySelector('[data-testid^="last-msg"]');
+
+        if (nameElement || messageElement) {
+          chats.push({
+            name: nameElement?.textContent?.trim() || "Chat #" + (index + 1),
+            lastMessage:
+              messageElement?.textContent?.trim().substring(0, 60) || "...",
+          });
+        }
       });
 
       return chats;
     });
 
-    spinner.succeed(chalk.green("✓ Chats cargados"));
+    spinner.succeed(chalk.green(`✓ Chats cargados (${chatsInfo.length} encontrados)`));
 
     // Mostrar resultados
-    console.log(chalk.bold.yellow("\n💬 TUS ÚLTIMOS 5 CHATS:\n"));
+    if (chatsInfo.length > 0) {
+      console.log(chalk.bold.yellow("\n💬 TUS ÚLTIMOS CHATS:\n"));
 
-    chatsInfo.forEach((chat, index) => {
-      console.log(chalk.cyan(`${index + 1}. ${chat.name}`));
-      console.log(chalk.gray(`   ${chat.lastMessage}...\n`));
-    });
+      chatsInfo.forEach((chat, index) => {
+        console.log(chalk.cyan(`${index + 1}. ${chat.name}`));
+        console.log(chalk.gray(`   ${chat.lastMessage}...\n`));
+      });
+    } else {
+      console.log(chalk.yellow("\n⚠️  No se pudieron extraer los chats (interfaz de WhatsApp puede haber cambiado)"));
+      console.log(chalk.gray("   Pero la sesión está activa y funcional\n"));
+    }
 
     // Obtener información de la sesión
     const userInfo = await page.evaluate(() => {

@@ -14,6 +14,7 @@
     "screenshot": "bun run src/commands/screenshot.ts",
     "interact": "bun run src/commands/interact.ts",
     "whatsapp": "bun run src/commands/whatsapp.ts",
+    "whatsapp:simple": "bun run src/commands/whatsapp-simple.ts",
     "whatsapp:send": "bun run src/commands/whatsapp-send.ts"
   },
   "devDependencies": {
