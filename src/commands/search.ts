@@ -32,14 +32,14 @@ async function searchDemo() {
     spinner.text = "Extrayendo resultados...";
 
     const results = await page.evaluate(() => {
-      const items = document.querySelectorAll("div.g");
+      const items = document.querySelectorAll("div.g, div[data-sokoban-container]");
       const extracted: Array<{ title: string; url: string }> = [];
 
       items.forEach((item, index) => {
         if (index >= 5) return;
 
         const titleElement = item.querySelector("h3");
-        const linkElement = item.querySelector("a");
+        const linkElement = item.querySelector("a[href^='http']");
 
         if (titleElement && linkElement) {
           extracted.push({
@@ -58,10 +58,15 @@ async function searchDemo() {
       "\n" + chalk.bold(`🔍 Resultados para: "${searchQuery}"\n`)
     );
 
-    results.forEach((result, index) => {
-      console.log(chalk.cyan(`${index + 1}. ${result.title}`));
-      console.log(chalk.gray(`   ${result.url}\n`));
-    });
+    if (results.length === 0) {
+      console.log(chalk.yellow("⚠️  No se encontraron resultados o Google detectó automatización"));
+      console.log(chalk.gray("   Intenta ejecutar el comando nuevamente\n"));
+    } else {
+      results.forEach((result, index) => {
+        console.log(chalk.cyan(`${index + 1}. ${result.title}`));
+        console.log(chalk.gray(`   ${result.url}\n`));
+      });
+    }
   } catch (error) {
     spinner.fail(chalk.red("Error durante la búsqueda"));
     console.error(error);
