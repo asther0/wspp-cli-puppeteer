@@ -47,18 +47,30 @@ bun run interact
 ```
 
 ### 5. WhatsApp Web (wspp-cli) 🔥
-Automatiza WhatsApp Web - el origen del proyecto:
+Automatiza WhatsApp Web - **el origen del proyecto**:
+
+#### Demo Simple (Recomendado para empezar)
+```bash
+bun run whatsapp:simple
+```
+Abre WhatsApp Web, detecta el QR, y mantiene la sesión activa por 20 segundos.
+
+#### Demo Completo
 ```bash
 # Abrir WhatsApp Web y ver últimos chats
 bun run whatsapp
+```
 
-# Enviar mensaje automático
+#### Enviar Mensajes Automáticos
+```bash
 bun run whatsapp:send "Nombre del Contacto" "Tu mensaje aquí"
 ```
 **Ejemplo:**
 ```bash
 bun run whatsapp:send "Juan Pérez" "Hola! Este mensaje fue enviado con Puppeteer 🤖"
 ```
+
+**Nota:** La primera vez necesitas escanear el código QR con tu teléfono.
 
 ## ⚙️ Configuración
 
