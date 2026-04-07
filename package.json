@@ -8,6 +8,7 @@
     "demo": "index.ts"
   },
   "scripts": {
+    "demo": "bun run src/commands/demo.ts",
     "scrape": "bun run src/commands/scrape.ts",
     "search": "bun run src/commands/search.ts",
     "screenshot": "bun run src/commands/screenshot.ts",
