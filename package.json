@@ -15,7 +15,13 @@
     "interact": "bun run src/commands/interact.ts",
     "whatsapp": "bun run src/commands/whatsapp.ts",
     "whatsapp:simple": "bun run src/commands/whatsapp-simple.ts",
-    "whatsapp:send": "bun run src/commands/whatsapp-send.ts"
+    "whatsapp:send": "bun run src/commands/whatsapp-send.ts",
+    "whatsapp:send2": "bun run src/commands/whatsapp-send-v2.ts",
+    "whatsapp:url": "bun run src/commands/whatsapp-send-url.ts",
+    "whatsapp:manual": "bun run src/commands/whatsapp-manual.ts",
+    "whatsapp:auto": "bun run src/commands/whatsapp-auto.ts",
+    "wspp": "bun run src/commands/wspp.ts",
+    "wspp:debug": "bun run src/commands/wspp-debug.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"
