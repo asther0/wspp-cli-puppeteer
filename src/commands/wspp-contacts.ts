@@ -140,7 +140,7 @@ async function wsppContacts() {
     });
 
     // Filter out non-contact entries
-    const NOISE = ["you", "aún no", "hola desde", "http", "buscar", "search", "chats"];
+    const NOISE = ["you", "aún no", "hola desde", "http", "buscar", "search", "chats", "loading"];
     const filtered = contacts
       .map(c => c.name)
       .filter(name => {
@@ -148,7 +148,8 @@ async function wsppContacts() {
         return !NOISE.some(n => lower.includes(n))
           && name.length > 1
           && !/^\d{1,2}:\d{2}/.test(name)
-          && !/^(AM|PM)$/i.test(name);
+          && !/^(AM|PM)$/i.test(name)
+          && !/^[\p{Emoji}\s✅👍🏻]+$/u.test(name);
       });
 
     spinner.succeed(chalk.green(`✓ ${filtered.length} contactos encontrados`));
@@ -160,9 +161,8 @@ async function wsppContacts() {
       }
     } else {
       const maxLen = Math.max(...filtered.map(n => n.length), 20);
-      const colW = maxLen + 4;
+      const colW = Math.max(maxLen + 2, 40);
       const numW = 4;
-      const totalW = numW + 3 + colW;
 
       const line = (l: string, m: string, r: string, fill: string) =>
         l + fill.repeat(numW + 2) + m + fill.repeat(colW + 2) + r;
