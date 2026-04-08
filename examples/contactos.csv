@@ -1,0 +1,4 @@
+phone,name,message
++51987654321,Juan,"Hola {{name}}, esto es una prueba desde CSV"
++51912345678,María,
++51998877665,Pedro,"{{name}}, recordatorio de reunión mañana"

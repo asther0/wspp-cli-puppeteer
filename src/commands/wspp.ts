@@ -3,7 +3,8 @@ import ora from "ora";
 import { launchBrowser, closeBrowser, hasSession } from "../utils/browser";
 import { extractContacts } from "../utils/contacts";
 import { sendMessage, sendMessageByPhone } from "../utils/sender";
-import { sendBulkMessages } from "../utils/bulk-sender";
+import { sendBulkMessages, sendCsvMessages } from "../utils/bulk-sender";
+import { parseCsv } from "../utils/csv-parser";
 import { showBanner } from "../ui/banner";
 import type { Page } from "puppeteer-core";
 
@@ -44,12 +45,28 @@ function parseArgs() {
     args.splice(atIdx, 2);
   }
 
+  // Extract --csv flag
+  let csvPath: string | null = null;
+  const csvIdx = args.indexOf("--csv");
+  if (csvIdx !== -1 && args[csvIdx + 1]) {
+    csvPath = args[csvIdx + 1];
+    args.splice(csvIdx, 2);
+  }
+
+  // Extract --dry-run flag
+  let dryRun = false;
+  const dryIdx = args.indexOf("--dry-run");
+  if (dryIdx !== -1) {
+    dryRun = true;
+    args.splice(dryIdx, 1);
+  }
+
   const firstArg = args[0] || "";
-  const message = args.slice(1).join(" ");
+  const message = csvPath ? args.join(" ") : args.slice(1).join(" ");
 
   // Detect bulk: "José,María" (commas) or "2 3 4 5" (PowerShell expands commas for digits)
   const allDigitsWithSpaces = /^\d+(\s+\d+)+$/.test(firstArg.trim());
-  const isBulk = firstArg.includes(",") || allDigitsWithSpaces;
+  const isBulk = !csvPath && (firstArg.includes(",") || allDigitsWithSpaces);
   const targets = isBulk
     ? (allDigitsWithSpaces && !firstArg.includes(",")
         ? firstArg.split(/\s+/)
@@ -57,47 +74,93 @@ function parseArgs() {
       ).map(t => t.trim()).filter(Boolean)
     : [];
   // Phone: starts with + and has 7+ digits
-  const isPhone = !isBulk && /^\+\d{7,}$/.test(firstArg.replace(/[\s\-()]/g, ''));
-  const isPositional = !isBulk && !isPhone && /^\d+$/.test(firstArg);
+  const isPhone = !isBulk && !csvPath && /^\+\d{7,}$/.test(firstArg.replace(/[\s\-()]/g, ''));
+  const isPositional = !isBulk && !csvPath && !isPhone && /^\d+$/.test(firstArg);
 
-  return { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime };
+  return { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun };
 }
 
 async function wsppCli() {
-  const { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime } = parseArgs();
+  const { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun } = parseArgs();
 
-  if (!firstArg || !message) {
+  // CSV mode: only needs --csv flag (message is optional template)
+  if (csvPath) {
+    showBanner();
+    const csv = await parseCsv(csvPath);
+
+    if (csv.errors.length > 0) {
+      csv.errors.forEach((e) => console.log(chalk.yellow(`  ⚠ ${e}`)));
+    }
+
+    console.log(chalk.cyan("  📄 CSV:"), csvPath);
+    console.log(chalk.cyan("  📨 Destinatarios:"), `${csv.rows.length} filas válidas`);
+    if (message) console.log(chalk.cyan("  💬 Template:"), message);
+    if (scheduleTime) console.log(chalk.cyan("  ⏰ Programado:"), scheduleTime);
+    if (dryRun) console.log(chalk.yellow("  🧪 Modo dry-run (no se envía nada)"));
+    console.log();
+
+    // Dry-run: show what would be sent and exit
+    if (dryRun) {
+      const { renderTemplate } = await import("../utils/template-engine");
+      console.log(chalk.cyan("  ─── Preview ───\n"));
+      for (let i = 0; i < csv.rows.length; i++) {
+        const row = csv.rows[i];
+        const label = row.name || row.phone || `Fila ${i + 2}`;
+        const rawMsg = row.message || message || "(sin mensaje)";
+        const vars: Record<string, string> = {};
+        for (const [k, v] of Object.entries(row)) {
+          if (v) vars[k] = v;
+        }
+        const rendered = renderTemplate(rawMsg, vars);
+        const via = row.phone ? chalk.gray(`(${row.phone})`) : chalk.gray("(nombre)");
+        console.log(chalk.white(`  ${i + 1}. ${label} ${via}`));
+        console.log(chalk.gray(`     → ${rendered}\n`));
+      }
+      console.log(chalk.green(`  ✓ ${csv.rows.length} mensajes listos. Quita --dry-run para enviar.\n`));
+      process.exit(0);
+    }
+
+    if (!message && !csv.headers.includes("message")) {
+      console.log(chalk.red("  ❌ Falta el mensaje. Usa un template o agrega columna 'message' al CSV.\n"));
+      console.log(chalk.gray('     bun run wspp --csv archivo.csv "Hola {{name}}"'));
+      process.exit(1);
+    }
+
+    // Continue to browser launch below (csvPath is set)
+
+  } else if (!firstArg || !message) {
     showBanner();
     console.log(chalk.red("  ❌ Faltan parámetros\n"));
     console.log(chalk.yellow("  📝 Uso:"));
-    console.log(chalk.gray('     bun run wspp "Contacto" "Mensaje"      → por nombre'));
-    console.log(chalk.gray('     bun run wspp 3 "Mensaje"               → por posición (#)'));
-    console.log(chalk.gray('     bun run wspp +51987654321 "Mensaje"    → por teléfono'));
-    console.log(chalk.gray('     bun run wspp "1,3,5" "Mensaje"         → masivo por #'));
-    console.log(chalk.gray('     bun run wspp "Juan,María" "Mensaje"    → masivo por nombre'));
-    console.log(chalk.gray('     bun run wspp "+51...,+56..." "Mensaje" → masivo por tel'));
-    console.log(chalk.gray('     bun run wspp 3 "Msg" --at 08:00       → programado'));
-    console.log(chalk.gray('     bun run wspp:contacts                  → ver contactos'));
-    console.log(chalk.gray('     bun run wspp:i                         → modo interactivo\n'));
+    console.log(chalk.gray('     bun run wspp "Contacto" "Mensaje"         → por nombre'));
+    console.log(chalk.gray('     bun run wspp 3 "Mensaje"                  → por posición (#)'));
+    console.log(chalk.gray('     bun run wspp +51987654321 "Mensaje"       → por teléfono'));
+    console.log(chalk.gray('     bun run wspp "1,3,5" "Mensaje"            → masivo por #'));
+    console.log(chalk.gray('     bun run wspp "Juan,María" "Mensaje"       → masivo por nombre'));
+    console.log(chalk.gray('     bun run wspp "+51...,+56..." "Mensaje"    → masivo por tel'));
+    console.log(chalk.gray('     bun run wspp --csv contactos.csv "Hola"   → masivo desde CSV'));
+    console.log(chalk.gray('     bun run wspp 3 "Msg" --at 08:00          → programado'));
+    console.log(chalk.gray('     bun run wspp:contacts                     → ver contactos'));
+    console.log(chalk.gray('     bun run wspp:i                            → modo interactivo\n'));
     process.exit(1);
-  }
-
-  showBanner();
-
-  if (isBulk) {
-    console.log(chalk.cyan("  📨 Envío masivo:"), `${targets.length} destinatarios`);
-  } else if (isPhone) {
-    console.log(chalk.cyan("  📞 Para:"), firstArg);
-  } else if (isPositional) {
-    console.log(chalk.cyan("  📱 Para:"), `contacto #${firstArg}`);
   } else {
-    console.log(chalk.cyan("  📱 Para:"), firstArg);
+    showBanner();
+
+    if (isBulk) {
+      console.log(chalk.cyan("  📨 Envío masivo:"), `${targets.length} destinatarios`);
+    } else if (isPhone) {
+      console.log(chalk.cyan("  📞 Para:"), firstArg);
+    } else if (isPositional) {
+      console.log(chalk.cyan("  📱 Para:"), `contacto #${firstArg}`);
+    } else {
+      console.log(chalk.cyan("  📱 Para:"), firstArg);
+    }
+    console.log(chalk.cyan("  💬 Mensaje:"), message);
+    if (scheduleTime) {
+      console.log(chalk.cyan("  ⏰ Programado:"), scheduleTime);
+    }
+    console.log();
   }
-  console.log(chalk.cyan("  💬 Mensaje:"), message);
-  if (scheduleTime) {
-    console.log(chalk.cyan("  ⏰ Programado:"), scheduleTime);
-  }
-  console.log();
 
   const sessionExists = hasSession();
   const mode = sessionExists ? "headless (background)" : "visible (QR)";
@@ -129,8 +192,25 @@ async function wsppCli() {
       await waitUntil(targetTime);
     }
 
+    // CSV mode
+    if (csvPath) {
+      const csv = await parseCsv(csvPath);
+      if (csv.errors.length > 0) {
+        csv.errors.forEach((e) => console.log(chalk.yellow(`  ⚠ ${e}`)));
+      }
+
+      console.log();
+      const result = await sendCsvMessages(page, csv.rows, message);
+
+      console.log(chalk.cyan("\n  ─── Resumen CSV ───"));
+      console.log(chalk.green(`  ✓ Enviados: ${result.success}`));
+      if (result.failed.length > 0) {
+        console.log(chalk.red(`  ✖ Fallidos: ${result.failed.length} (${result.failed.join(", ")})`));
+      }
+      console.log();
+
     // Bulk mode
-    if (isBulk) {
+    } else if (isBulk) {
       // Only load contacts if any target is a position number
       const hasPositions = targets.some(t => /^\d+$/.test(t));
       let contacts: Awaited<ReturnType<typeof extractContacts>> = [];
