@@ -47,10 +47,14 @@ function parseArgs() {
   const firstArg = args[0] || "";
   const message = args.slice(1).join(" ");
 
-  // Detect bulk: "2,3,4,5" or "2 3 4 5" (PowerShell expands commas to spaces)
-  const isBulk = firstArg.includes(",") || /^\d+(\s+\d+)+$/.test(firstArg.trim());
+  // Detect bulk: "José,María" (commas) or "2 3 4 5" (PowerShell expands commas for digits)
+  const allDigitsWithSpaces = /^\d+(\s+\d+)+$/.test(firstArg.trim());
+  const isBulk = firstArg.includes(",") || allDigitsWithSpaces;
   const targets = isBulk
-    ? firstArg.split(/[,\s]+/).map(t => t.trim()).filter(Boolean)
+    ? (allDigitsWithSpaces && !firstArg.includes(",")
+        ? firstArg.split(/\s+/)
+        : firstArg.split(",")
+      ).map(t => t.trim()).filter(Boolean)
     : [];
   // Phone: starts with + and has 7+ digits
   const isPhone = !isBulk && /^\+\d{7,}$/.test(firstArg.replace(/[\s\-()]/g, ''));
