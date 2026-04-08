@@ -73,35 +73,69 @@ async function wsppContacts() {
       await delay(3000);
     }
 
+    // Debug screenshot
+    await page.screenshot({ path: "wspp-contacts-state.png" });
+
     // Extraer contactos visibles
     spinner.text = "Extrayendo contactos...";
 
     const contacts = await page.evaluate(() => {
       const results: Array<{ name: string; lastMsg: string; time: string }> = [];
-      const items = document.querySelectorAll('span[title]');
       const seen = new Set<string>();
 
-      items.forEach((span) => {
-        const name = span.getAttribute('title') || '';
-        if (!name || seen.has(name) || name.length > 50) return;
+      // Buscar todos los elementos que parecen ser nombres de chat
+      // WhatsApp usa spans con title, o spans dentro de ciertos contenedores
+      const chatRows = document.querySelectorAll('[role="listitem"], [data-testid^="cell-frame-container"]');
+
+      chatRows.forEach((row) => {
+        // Buscar el nombre del chat - puede ser span[title] o el primer texto prominente
+        const nameSpan = row.querySelector('span[title]')
+          || row.querySelector('[data-testid^="cell-frame-title"] span')
+          || row.querySelector('span[dir="auto"]');
+
+        const name = nameSpan?.getAttribute('title')
+          || nameSpan?.textContent?.trim()
+          || '';
+
+        if (!name || seen.has(name) || name.length > 60 || name.startsWith('http')) return;
         seen.add(name);
 
-        const row = span.closest('[role="listitem"]') || span.closest('[data-testid^="cell-frame"]');
-        if (!row) return;
-
         // Buscar último mensaje
-        const msgSpans = row.querySelectorAll('span[title]');
-        let lastMsg = '';
-        if (msgSpans.length > 1) {
-          lastMsg = msgSpans[msgSpans.length - 1]?.getAttribute('title')?.substring(0, 40) || '';
-        }
+        const msgEl = row.querySelector('[data-testid^="last-msg"] span')
+          || row.querySelector('span[title]:nth-of-type(2)')
+          || row.querySelectorAll('span[dir="auto"]')[1];
+
+        const lastMsg = (msgEl?.textContent?.trim() || '').substring(0, 45);
 
         // Buscar hora
-        const timeEl = row.querySelector('div[class] > span');
-        const time = timeEl?.textContent?.trim() || '';
+        const allSmallText = row.querySelectorAll('span');
+        let time = '';
+        allSmallText.forEach((s) => {
+          const t = s.textContent?.trim() || '';
+          if (t.match(/^\d{1,2}:\d{2}|yesterday|ayer|AM|PM|\d{1,2}\/\d{1,2}/i)) {
+            time = t;
+          }
+        });
 
         results.push({ name, lastMsg, time });
       });
+
+      // Si no encontró por listitem, buscar directamente todos los span[title] en #side
+      if (results.length === 0) {
+        const side = document.querySelector('#side');
+        if (side) {
+          const allSpans = side.querySelectorAll('span[title], span[dir="auto"]');
+          allSpans.forEach((span) => {
+            const text = span.getAttribute('title') || span.textContent?.trim() || '';
+            if (text && !seen.has(text) && text.length > 1 && text.length < 50
+                && !text.startsWith('http') && !text.includes('Buscar')
+                && !text.includes('Search')) {
+              seen.add(text);
+              results.push({ name: text, lastMsg: '', time: '' });
+            }
+          });
+        }
+      }
 
       return results.slice(0, 15);
     });
