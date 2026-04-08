@@ -9,6 +9,7 @@ import type { Page } from "puppeteer-core";
 import type { Browser } from "puppeteer-core";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const humanDelay = () => Math.floor(Math.random() * (7000 - 3000 + 1)) + 3000;
 
 async function isLoggedIn(page: Page): Promise<boolean> {
   return page.evaluate(() => {
@@ -125,7 +126,7 @@ async function handleSendBulk(page: Page, contacts: Contact[]) {
       await sendMessage(page, contact.name, message);
       spinner.succeed(chalk.green(`✓ Enviado a ${contact.name}`));
       success++;
-      if (i < selected.length - 1) await delay(3000);
+      if (i < selected.length - 1) await delay(humanDelay());
     } catch (err: any) {
       spinner.fail(chalk.red(`✖ Error con ${contact.name}: ${err.message}`));
       failed.push(contact.name);

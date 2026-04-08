@@ -8,6 +8,13 @@ import { renderTemplate } from "./template-engine";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const WARN_LIMIT = 50;
+
+/** Returns a random delay between min and max ms (default: 3s-7s) */
+function humanDelay(min = 3000, max = 7000): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 export interface BulkResult {
   success: number;
   failed: string[];
@@ -19,6 +26,10 @@ export async function sendBulkMessages(
   message: string,
   contacts: Contact[],
 ): Promise<BulkResult> {
+  if (targets.length >= WARN_LIMIT) {
+    console.log(chalk.yellow(`  ⚠ ${targets.length} mensajes — enviar más de ${WARN_LIMIT} por sesión aumenta el riesgo de ban`));
+  }
+
   const result: BulkResult = { success: 0, failed: [] };
 
   for (let i = 0; i < targets.length; i++) {
@@ -53,7 +64,8 @@ export async function sendBulkMessages(
       result.success++;
 
       if (i < targets.length - 1) {
-        await delay(3000);
+        const wait = humanDelay();
+        await delay(wait);
       }
     } catch (err: any) {
       spinner.fail(chalk.red(`  ✖ Error con ${label}: ${err.message}`));
@@ -69,6 +81,10 @@ export async function sendCsvMessages(
   rows: CsvRow[],
   defaultMessage: string,
 ): Promise<BulkResult> {
+  if (rows.length >= WARN_LIMIT) {
+    console.log(chalk.yellow(`  ⚠ ${rows.length} mensajes — enviar más de ${WARN_LIMIT} por sesión aumenta el riesgo de ban`));
+  }
+
   const result: BulkResult = { success: 0, failed: [] };
 
   for (let i = 0; i < rows.length; i++) {
@@ -101,7 +117,8 @@ export async function sendCsvMessages(
       result.success++;
 
       if (i < rows.length - 1) {
-        await delay(3000);
+        const wait = humanDelay();
+        await delay(wait);
       }
     } catch (err: any) {
       spinner.fail(chalk.red(`  ✖ Error con ${label}: ${err.message}`));
