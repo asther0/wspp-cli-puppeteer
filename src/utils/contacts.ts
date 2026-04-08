@@ -21,13 +21,26 @@ export async function extractContacts(page: Page, max = 10): Promise<Contact[]> 
     const results: Array<{ name: string; phone: string; source: string }> = [];
     const seen = new Set<string>();
 
+    // Invisible Unicode chars that WhatsApp wraps around message previews
+    const invisibleRe = /[\u200e\u200f\u200b\u200c\u200d\u202a-\u202e\u2066-\u2069\uFEFF]/;
+
     // Strategy 1: [role="listitem"] rows with span[title]
     const chatRows = document.querySelectorAll('[role="listitem"]');
     chatRows.forEach((row) => {
       const allTitleSpans = row.querySelectorAll('span[title]');
       if (allTitleSpans.length === 0) return;
 
-      const name = allTitleSpans[0].getAttribute('title') || '';
+      // Find the first span[title] that is NOT a message preview
+      // Message previews have invisible Unicode wrapper chars, contact names don't
+      let name = '';
+      for (const span of allTitleSpans) {
+        const title = span.getAttribute('title') || '';
+        if (title && !invisibleRe.test(title)) {
+          name = title;
+          break;
+        }
+      }
+
       if (!name || seen.has(name) || name.length > 60 || name.startsWith('http')) return;
       seen.add(name);
 
