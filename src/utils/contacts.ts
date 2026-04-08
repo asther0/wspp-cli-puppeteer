@@ -31,13 +31,36 @@ export async function extractContacts(page: Page, max = 10): Promise<Contact[]> 
       if (!name || seen.has(name) || name.length > 60 || name.startsWith('http')) return;
       seen.add(name);
 
+      // Extract phone: search data-id in row, children, and parent
       let phone = '';
-      const dataId = row.getAttribute('data-id')
-        || row.querySelector('[data-id]')?.getAttribute('data-id')
+      const el = row as HTMLElement;
+
+      // Look for data-id with phone@c.us pattern anywhere in/around the row
+      const allDataIds: string[] = [];
+      if (el.getAttribute('data-id')) allDataIds.push(el.getAttribute('data-id')!);
+      el.querySelectorAll('[data-id]').forEach(e => {
+        const d = e.getAttribute('data-id');
+        if (d) allDataIds.push(d);
+      });
+      // Also check parent (WhatsApp sometimes nests listitem inside a div with data-id)
+      if (el.parentElement?.getAttribute('data-id')) {
+        allDataIds.push(el.parentElement.getAttribute('data-id')!);
+      }
+      // Check for testid that contains phone
+      const testId = el.getAttribute('data-testid')
+        || el.querySelector('[data-testid]')?.getAttribute('data-testid')
         || '';
-      const phoneMatch = dataId.match(/(\d{7,15})@/);
-      if (phoneMatch) phone = '+' + phoneMatch[1];
-      if (!phone && /^\+?\d[\d\s\-()]{6,}$/.test(name)) phone = name.replace(/[\s\-()]/g, '');
+      if (testId) allDataIds.push(testId);
+
+      for (const did of allDataIds) {
+        const m = did.match(/(\d{7,15})@/);
+        if (m) { phone = '+' + m[1]; break; }
+      }
+
+      // If name IS a phone number, use it
+      if (!phone && /^\+?\d[\d\s\-()]{6,}$/.test(name)) {
+        phone = name.replace(/[\s\-()]/g, '');
+      }
 
       results.push({ name, phone, source: 'listitem' });
     });
