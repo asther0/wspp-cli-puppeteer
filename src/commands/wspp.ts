@@ -2,9 +2,10 @@ import chalk from "chalk";
 import ora from "ora";
 import { launchBrowser, closeBrowser, hasSession } from "../utils/browser";
 import { extractContacts } from "../utils/contacts";
-import { sendMessage, sendMessageByPhone } from "../utils/sender";
+import { sendMessage, sendMessageByPhone, searchAndSelectContact } from "../utils/sender";
 import { sendBulkMessages, sendCsvMessages } from "../utils/bulk-sender";
 import { parseCsv } from "../utils/csv-parser";
+import { sendImage, sendDocument, sendPoll, sendCameraPhoto } from "../utils/media-sender";
 import { showBanner } from "../ui/banner";
 import type { Page } from "puppeteer-core";
 
@@ -61,6 +62,40 @@ async function parseArgs() {
     args.splice(fileIdx, 2);
   }
 
+  // Extract --image flag
+  let imagePath: string | null = null;
+  const imgIdx = args.indexOf("--image");
+  if (imgIdx !== -1 && args[imgIdx + 1]) {
+    imagePath = args[imgIdx + 1];
+    args.splice(imgIdx, 2);
+  }
+
+  // Extract --doc flag
+  let docPath: string | null = null;
+  const docIdx = args.indexOf("--doc");
+  if (docIdx !== -1 && args[docIdx + 1]) {
+    docPath = args[docIdx + 1];
+    args.splice(docIdx, 2);
+  }
+
+  // Extract --poll flag (consumes next 2 args: question and options)
+  let pollQuestion: string | null = null;
+  let pollOptions: string[] = [];
+  const pollIdx = args.indexOf("--poll");
+  if (pollIdx !== -1 && args[pollIdx + 1] && args[pollIdx + 2]) {
+    pollQuestion = args[pollIdx + 1];
+    pollOptions = args[pollIdx + 2].split(",").map((o) => o.trim()).filter(Boolean);
+    args.splice(pollIdx, 3);
+  }
+
+  // Extract --camera flag
+  let useCamera = false;
+  const camIdx = args.indexOf("--camera");
+  if (camIdx !== -1) {
+    useCamera = true;
+    args.splice(camIdx, 1);
+  }
+
   // Extract --dry-run flag
   let dryRun = false;
   const dryIdx = args.indexOf("--dry-run");
@@ -95,11 +130,14 @@ async function parseArgs() {
   const isPhone = !isBulk && !csvPath && /^\+\d{7,}$/.test(firstArg.replace(/[\s\-()]/g, ''));
   const isPositional = !isBulk && !csvPath && !isPhone && /^\d+$/.test(firstArg);
 
-  return { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun };
+  // Media flags allow sending without a text message
+  const hasMedia = !!(imagePath || docPath || pollQuestion || useCamera);
+
+  return { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun, imagePath, docPath, pollQuestion, pollOptions, useCamera, hasMedia };
 }
 
 async function wsppCli() {
-  const { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun } = await parseArgs();
+  const { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun, imagePath, docPath, pollQuestion, pollOptions, useCamera, hasMedia } = await parseArgs();
 
   // CSV mode: only needs --csv flag (message is optional template)
   if (csvPath) {
@@ -148,7 +186,7 @@ async function wsppCli() {
 
     // Continue to browser launch below (csvPath is set)
 
-  } else if (!firstArg || !message) {
+  } else if (!firstArg || (!message && !hasMedia)) {
     showBanner();
     console.log(chalk.red("  ❌ Faltan parámetros\n"));
     console.log(chalk.yellow("  📝 Uso:"));
@@ -160,6 +198,10 @@ async function wsppCli() {
     console.log(chalk.gray('     bun run wspp "+51...,+56..." "Mensaje"    → masivo por tel'));
     console.log(chalk.gray('     bun run wspp --csv contactos.csv "Hola"   → masivo desde CSV'));
     console.log(chalk.gray('     bun run wspp 3 --file msg.txt            → mensaje desde archivo'));
+    console.log(chalk.gray('     bun run wspp 3 --image foto.jpg "Caption" → enviar imagen'));
+    console.log(chalk.gray('     bun run wspp 3 --doc archivo.pdf          → enviar documento'));
+    console.log(chalk.gray('     bun run wspp "Grupo" --poll "?" "a,b,c"   → encuesta'));
+    console.log(chalk.gray('     bun run wspp 3 --camera                   → foto con cámara'));
     console.log(chalk.gray('     bun run wspp 3 "Msg" --at 08:00          → programado'));
     console.log(chalk.gray('     bun run wspp:contacts                     → ver contactos'));
     console.log(chalk.gray('     bun run wspp:i                            → modo interactivo\n'));
@@ -177,7 +219,11 @@ async function wsppCli() {
     } else {
       console.log(chalk.cyan("  📱 Para:"), firstArg);
     }
-    console.log(chalk.cyan("  💬 Mensaje:"), message);
+    if (message) console.log(chalk.cyan("  💬 Mensaje:"), message);
+    if (imagePath) console.log(chalk.cyan("  🖼️  Imagen:"), imagePath);
+    if (docPath) console.log(chalk.cyan("  📎 Documento:"), docPath);
+    if (pollQuestion) console.log(chalk.cyan("  📊 Encuesta:"), pollQuestion, chalk.gray(`(${pollOptions.join(", ")})`));
+    if (useCamera) console.log(chalk.cyan("  📸 Cámara:"), "captura en vivo");
     if (scheduleTime) {
       console.log(chalk.cyan("  ⏰ Programado:"), scheduleTime);
     }
@@ -185,9 +231,10 @@ async function wsppCli() {
   }
 
   const sessionExists = hasSession();
-  const mode = sessionExists ? "headless (background)" : "visible (QR)";
+  const forceVisible = useCamera;
+  const mode = sessionExists && !forceVisible ? "headless (background)" : "visible";
   const spinner = ora(`Iniciando [${mode}]...`).start();
-  const browser = await launchBrowser(true);
+  const browser = await launchBrowser(true, forceVisible, useCamera);
 
   try {
     const pages = await browser.pages();
@@ -266,10 +313,20 @@ async function wsppCli() {
       // Single mode
       let contactName: string;
 
+      // Step 1: Open the chat
       if (isPhone) {
         contactName = firstArg;
-        spinner.start(`Enviando a ${firstArg}...`);
-        await sendMessageByPhone(page, firstArg, message);
+        spinner.start(`Abriendo chat con ${firstArg}...`);
+        // sendMessageByPhone navigates to the chat URL
+        if (!hasMedia) {
+          await sendMessageByPhone(page, firstArg, message);
+        } else {
+          // Navigate to chat without sending message yet
+          const digits = firstArg.replace(/[\s\-()]/g, '');
+          const phoneNumber = digits.startsWith('+') ? digits.slice(1) : digits;
+          await page.goto(`https://web.whatsapp.com/send?phone=${phoneNumber}`, { waitUntil: "networkidle2" });
+          await delay(5000);
+        }
       } else if (isPositional) {
         const pos = parseInt(firstArg, 10);
         spinner.start("Obteniendo lista de contactos...");
@@ -283,16 +340,40 @@ async function wsppCli() {
         spinner.succeed(chalk.green(`Contacto #${pos}: ${contactName}`));
 
         spinner.start(`Enviando a "${contactName}"...`);
-        await sendMessage(page, contactName, message);
+        if (!hasMedia) {
+          await sendMessage(page, contactName, message);
+        } else {
+          await searchAndSelectContact(page, contactName);
+        }
       } else {
         contactName = firstArg;
-
         spinner.start(`Enviando a "${contactName}"...`);
-        await sendMessage(page, contactName, message);
+        if (!hasMedia) {
+          await sendMessage(page, contactName, message);
+        } else {
+          await searchAndSelectContact(page, contactName);
+        }
+      }
+
+      // Step 2: Send media if applicable
+      if (hasMedia) {
+        if (imagePath) {
+          spinner.text = "Enviando imagen...";
+          await sendImage(page, imagePath, message || undefined);
+        } else if (docPath) {
+          spinner.text = "Enviando documento...";
+          await sendDocument(page, docPath, message || undefined);
+        } else if (pollQuestion) {
+          spinner.text = "Creando encuesta...";
+          await sendPoll(page, pollQuestion, pollOptions);
+        } else if (useCamera) {
+          spinner.text = "Abriendo cámara...";
+          await sendCameraPhoto(page, message || undefined);
+        }
       }
 
       await page.screenshot({ path: "wspp-sent.png" });
-      spinner.succeed(chalk.bold.green("MENSAJE ENVIADO"));
+      spinner.succeed(chalk.bold.green("ENVIADO"));
       console.log(chalk.dim(`  📤 ${contactName} · 🕐 ${new Date().toLocaleTimeString("es-ES")}`));
     }
 

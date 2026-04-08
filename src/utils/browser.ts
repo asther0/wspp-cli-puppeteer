@@ -14,7 +14,7 @@ export function hasSession(): boolean {
   return fs.existsSync(WSPP_USER_DATA_DIR);
 }
 
-export async function launchBrowser(persistSession = false, forceVisible = false): Promise<Browser> {
+export async function launchBrowser(persistSession = false, forceVisible = false, enableCamera = false): Promise<Browser> {
   const canRunBackground = persistSession && hasSession() && !forceVisible;
 
   return await puppeteer.launch({
@@ -23,6 +23,7 @@ export async function launchBrowser(persistSession = false, forceVisible = false
     args: [
       ...LAUNCH_ARGS,
       ...(canRunBackground ? ["--window-position=-2400,-2400"] : []),
+      ...(enableCamera ? ["--use-fake-ui-for-media-stream"] : []),
     ],
     defaultViewport: DEFAULT_VIEWPORT,
     ...(persistSession ? { userDataDir: WSPP_USER_DATA_DIR } : {}),
