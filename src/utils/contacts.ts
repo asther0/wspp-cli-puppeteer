@@ -113,7 +113,16 @@ export async function extractContacts(page: Page, max = 10): Promise<Contact[]> 
     return results.slice(0, 30);
   });
 
-  return raw
-    .filter(({ name }) => !isJunk(name))
-    .slice(0, max);
+  const filtered = raw.filter(({ name }) => !isJunk(name));
+
+  // Remove community headers: if "X" is immediately followed by "X Something", drop "X"
+  const deduped = filtered.filter((c, i) => {
+    const next = filtered[i + 1];
+    if (next && next.name.startsWith(c.name) && next.name.length > c.name.length) {
+      return false;
+    }
+    return true;
+  });
+
+  return deduped.slice(0, max);
 }
