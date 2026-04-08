@@ -21,6 +21,8 @@
     "whatsapp:manual": "bun run src/commands/whatsapp-manual.ts",
     "whatsapp:auto": "bun run src/commands/whatsapp-auto.ts",
     "wspp": "bun run src/commands/wspp.ts",
+    "wspp:login": "bun run src/commands/wspp-login.ts",
+    "wspp:contacts": "bun run src/commands/wspp-contacts.ts",
     "wspp:debug": "bun run src/commands/wspp-debug.ts"
   },
   "devDependencies": {

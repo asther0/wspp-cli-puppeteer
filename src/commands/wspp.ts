@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import ora from "ora";
-import { launchBrowser, closeBrowser } from "../utils/browser";
+import { launchBrowser, closeBrowser, hasSession } from "../utils/browser";
 import type { Page } from "puppeteer-core";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -45,7 +45,9 @@ async function wsppCli() {
   console.log(chalk.cyan("  💬 Mensaje:"), message);
   console.log();
 
-  const spinner = ora("Iniciando...").start();
+  const sessionExists = hasSession();
+  const mode = sessionExists ? "headless (background)" : "visible (QR)";
+  const spinner = ora(`Iniciando [${mode}]...`).start();
   const browser = await launchBrowser(true);
 
   try {
