@@ -348,7 +348,7 @@ async function wsppCli() {
           spinner.text = "Creando encuesta...";
           await sendPoll(page, pollQuestion, pollOptions);
         } else if (useCamera) {
-          spinner.text = "Abriendo cámara...";
+          spinner.succeed("Cámara activada");
           await sendCameraPhoto(page, cameraTimer, message || undefined);
         }
       }

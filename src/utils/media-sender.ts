@@ -340,9 +340,11 @@ export async function sendCameraPhoto(page: Page, timerSeconds = 3, caption?: st
   // Wait for camera to activate
   await delay(4000);
 
-  // Countdown timer — overlay on the page so the user sees it
+  // Countdown timer — overlay on the browser page + terminal output
   if (timerSeconds > 0) {
+    console.log();
     for (let i = timerSeconds; i > 0; i--) {
+      // Show big number overlay in browser
       await page.evaluate((num: number) => {
         let overlay = document.getElementById("wspp-timer-overlay");
         if (!overlay) {
@@ -353,11 +355,11 @@ export async function sendCameraPhoto(page: Page, timerSeconds = 3, caption?: st
         }
         overlay.innerHTML = `<span style="font-size:120px;font-weight:bold;color:#fff;text-shadow:0 0 40px rgba(0,0,0,0.8),0 0 10px rgba(0,0,0,0.6);">${num}</span>`;
       }, i);
-      // Also log to terminal
-      process.stdout.write(`\r  ⏱️  Capturando en ${i}...`);
+      // Terminal countdown
+      console.log(`  ⏱️  ${i}...`);
       await delay(1000);
     }
-    process.stdout.write(`\r  📸 Capturando!       \n`);
+    console.log(`  📸 Click!\n`);
 
     // Remove overlay
     await page.evaluate(() => {
