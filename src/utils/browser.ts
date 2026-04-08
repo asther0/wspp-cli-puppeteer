@@ -15,12 +15,15 @@ export function hasSession(): boolean {
 }
 
 export async function launchBrowser(persistSession = false, forceVisible = false): Promise<Browser> {
-  const useHeadless = persistSession && hasSession() && !forceVisible;
+  const canRunBackground = persistSession && hasSession() && !forceVisible;
 
   return await puppeteer.launch({
     executablePath: CHROME_PATH,
-    headless: useHeadless ? "new" : false,
-    args: LAUNCH_ARGS,
+    headless: false,
+    args: [
+      ...LAUNCH_ARGS,
+      ...(canRunBackground ? ["--window-position=-2400,-2400"] : []),
+    ],
     defaultViewport: DEFAULT_VIEWPORT,
     ...(persistSession ? { userDataDir: WSPP_USER_DATA_DIR } : {}),
   });
