@@ -4,7 +4,7 @@ import { launchBrowser, closeBrowser, hasSession } from "../utils/browser";
 import { extractContacts } from "../utils/contacts";
 import { sendMessage } from "../utils/sender";
 import { sendBulkMessages } from "../utils/bulk-sender";
-import { showBanner, showSuccess } from "../ui/banner";
+import { showBanner } from "../ui/banner";
 import type { Page } from "puppeteer-core";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -24,7 +24,7 @@ async function waitForLogin(page: Page, spinner: ReturnType<typeof ora>): Promis
   for (let i = 0; i < 120; i++) {
     await delay(1000);
     if (await isLoggedIn(page)) {
-      spinner.succeed(chalk.green("✓ Login completado"));
+      spinner.succeed(chalk.green("Login completado"));
       return;
     }
     if (i > 0 && i % 15 === 0) console.log(chalk.gray(`  ${i}s...`));
@@ -100,7 +100,7 @@ async function wsppCli() {
     await delay(5000);
 
     if (await isLoggedIn(page)) {
-      spinner.succeed(chalk.green("✓ Sesión activa"));
+      spinner.succeed(chalk.green("Sesión activa"));
     } else {
       await waitForLogin(page, spinner);
     }
@@ -120,7 +120,7 @@ async function wsppCli() {
     if (isBulk) {
       spinner.start("Obteniendo contactos...");
       const contacts = await extractContacts(page);
-      spinner.succeed(chalk.green(`✓ ${contacts.length} contactos cargados`));
+      spinner.succeed(chalk.green(`${contacts.length} contactos cargados`));
 
       console.log();
       const result = await sendBulkMessages(page, targets, message, contacts);
@@ -146,7 +146,7 @@ async function wsppCli() {
         }
 
         contactName = contacts[pos - 1].name;
-        spinner.succeed(chalk.green(`✓ Contacto #${pos}: ${contactName}`));
+        spinner.succeed(chalk.green(`Contacto #${pos}: ${contactName}`));
       } else {
         contactName = firstArg;
       }
@@ -155,19 +155,14 @@ async function wsppCli() {
       await sendMessage(page, contactName, message);
 
       await page.screenshot({ path: "wspp-sent.png" });
-      spinner.succeed(chalk.bold.green("✓ MENSAJE ENVIADO"));
-
-      showSuccess("MENSAJE ENVIADO", {
-        "📤 Para": contactName,
-        "💬 Mensaje": `"${message}"`,
-        "🕐 Hora": new Date().toLocaleTimeString("es-ES"),
-      });
+      spinner.succeed(chalk.bold.green("MENSAJE ENVIADO"));
+      console.log(chalk.dim(`  📤 ${contactName} · 🕐 ${new Date().toLocaleTimeString("es-ES")}`));
     }
 
     await delay(3000);
 
   } catch (error: any) {
-    spinner.fail(chalk.red("✖ Error"));
+    spinner.fail(chalk.red("Error"));
     console.error(chalk.yellow("\n⚠️"), error.message);
 
     try {

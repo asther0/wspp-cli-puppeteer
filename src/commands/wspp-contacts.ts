@@ -72,7 +72,7 @@ async function wsppContacts() {
     spinner.text = "Extrayendo contactos...";
     const filtered = await extractContacts(page);
 
-    spinner.succeed(chalk.green(`✓ ${filtered.length} contactos encontrados`));
+    spinner.succeed(chalk.green(`${filtered.length} contactos encontrados`));
 
     if (filtered.length === 0) {
       console.log(chalk.yellow("\n⚠️  No se encontraron contactos"));

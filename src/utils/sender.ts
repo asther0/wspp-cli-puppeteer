@@ -19,48 +19,70 @@ export async function searchAndSelectContact(page: Page, contactName: string): P
   await page.keyboard.type(contactName, { delay: 100 });
   await delay(3000);
 
-  // Select contact with fallbacks
+  // Select contact: prefer exact name match over first result
   let chatOpened = false;
+  const nameLower = contactName.toLowerCase();
 
+  // Try exact match first among search results
   const listItems = await page.$$('[role="listitem"]');
-  if (listItems.length > 0) {
-    await listItems[0].click();
-    chatOpened = true;
-  }
-
-  if (!chatOpened) {
-    const cellFrames = await page.$$('[data-testid^="cell-frame"]');
-    if (cellFrames.length > 0) {
-      await cellFrames[0].click();
+  for (const item of listItems) {
+    const title = await item.$eval(
+      '[data-testid="cell-frame-title"] span[title], span[title]',
+      (el: Element) => el.getAttribute('title') || ''
+    ).catch(() => '');
+    if (title.toLowerCase() === nameLower) {
+      await item.click();
       chatOpened = true;
+      break;
     }
   }
 
+  // Fallback: partial match
   if (!chatOpened) {
-    const spans = await page.$$('span[title]');
-    for (const span of spans) {
-      const title = await span.evaluate((el: Element) => el.getAttribute('title'));
-      if (title && title.toLowerCase().includes(contactName.toLowerCase())) {
-        await span.click();
+    for (const item of listItems) {
+      const title = await item.$eval(
+        'span[title]',
+        (el: Element) => el.getAttribute('title') || ''
+      ).catch(() => '');
+      if (title.toLowerCase().includes(nameLower)) {
+        await item.click();
         chatOpened = true;
         break;
       }
     }
   }
 
+  // Last resort: arrow down + enter
   if (!chatOpened) {
-    await page.keyboard.press("ArrowDown");
-    await delay(300);
-    await page.keyboard.press("Enter");
+    if (listItems.length > 0) {
+      await listItems[0].click();
+      chatOpened = true;
+    } else {
+      await page.keyboard.press("ArrowDown");
+      await delay(300);
+      await page.keyboard.press("Enter");
+    }
   }
 
   await delay(3000);
 
-  // Verify chat opened
-  const footer = await page.$('footer');
-  const main = await page.$('main');
-  if (!footer && !main) {
-    throw new Error(`No se abrió el chat de "${contactName}". Verifica que el nombre sea exacto.`);
+  // Verify chat opened — if no message box, it might be a community overview
+  const hasMessageBox = await page.evaluate(() => {
+    const footer = document.querySelector('footer');
+    if (footer) {
+      const box = footer.querySelector('[role="textbox"], [contenteditable="true"], input, textarea');
+      if (box) return true;
+    }
+    const main = document.querySelector('main');
+    if (main) {
+      const box = main.querySelector('[role="textbox"], [contenteditable="true"], input, textarea');
+      if (box) return true;
+    }
+    return false;
+  });
+
+  if (!hasMessageBox) {
+    throw new Error(`No se puede enviar a "${contactName}". Puede ser una comunidad sin chat directo.`);
   }
 }
 
