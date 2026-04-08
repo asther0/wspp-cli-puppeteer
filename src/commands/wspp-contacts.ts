@@ -136,21 +136,31 @@ async function wsppContacts() {
         }
       }
 
-      return results.slice(0, 15);
+      return results.slice(0, 25);
     });
 
     // Filter out non-contact entries
-    const NOISE = ["you", "aún no", "hola desde", "http", "buscar", "search", "chats", "loading"];
+    const NOISE = [
+      "you", "aún no", "hola desde", "http", "buscar", "search",
+      "chats", "loading", "waiting for", "this may take", "pollito",
+      "convertido", "omg", "no hay mensajes",
+    ];
     const filtered = contacts
       .map(c => c.name)
       .filter(name => {
         const lower = name.toLowerCase();
-        return !NOISE.some(n => lower.includes(n))
-          && name.length > 1
-          && !/^\d{1,2}:\d{2}/.test(name)
-          && !/^(AM|PM)$/i.test(name)
-          && !/^[\p{Emoji}\s✅👍🏻]+$/u.test(name);
-      });
+        if (NOISE.some(n => lower.includes(n))) return false;
+        if (name.length <= 1) return false;
+        if (/^\d{1,2}:\d{2}/.test(name)) return false;
+        if (/^(AM|PM)$/i.test(name)) return false;
+        if (/^[\p{Emoji}\s✅👍🏻]+$/u.test(name)) return false;
+        // Filter out messages: if it looks like a sentence (lowercase start + spaces + long)
+        if (/^[a-záéíóúñ]/.test(name) && name.includes(' ') && name.length > 25) return false;
+        // Filter WhatsApp invisible chars + short junk
+        if (/^[\u200e\u200f\u202a-\u202e\u2066-\u2069\s]/.test(name) && name.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069\s]/g, '').length < 3) return false;
+        return true;
+      })
+      .slice(0, 10);
 
     spinner.succeed(chalk.green(`✓ ${filtered.length} contactos encontrados`));
 
