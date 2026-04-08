@@ -98,6 +98,8 @@ async function wsppCli() {
     if (scheduleTime) console.log(chalk.cyan("  ⏰ Programado:"), scheduleTime);
     if (dryRun) console.log(chalk.yellow("  🧪 Modo dry-run (no se envía nada)"));
     console.log();
+    console.log(chalk.gray("  ⚠ Usa --dry-run primero para verificar. Envía en tandas de <50."));
+    console.log(chalk.gray("  ⚠ Delays aleatorios (3-7s) activos. Más info: README.md → Anti-ban\n"));
 
     // Dry-run: show what would be sent and exit
     if (dryRun) {
@@ -148,6 +150,7 @@ async function wsppCli() {
 
     if (isBulk) {
       console.log(chalk.cyan("  📨 Envío masivo:"), `${targets.length} destinatarios`);
+      console.log(chalk.gray("  ⚠ Delays aleatorios (3-7s) activos. Más info: README.md → Anti-ban"));
     } else if (isPhone) {
       console.log(chalk.cyan("  📞 Para:"), firstArg);
     } else if (isPositional) {

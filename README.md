@@ -69,7 +69,38 @@ bun run wspp 1,3,5,7 "Reminder: meeting at 3pm"
 
 Shows progress for each contact and a summary at the end.
 
-### 3. Schedule a message for later
+### 3. Bulk send from CSV
+
+Load recipients from a CSV file and send personalized messages.
+
+```bash
+# Preview what would be sent (no messages sent)
+bun run wspp --csv contacts.csv --dry-run "Hello {{name}}"
+
+# Send for real
+bun run wspp --csv contacts.csv "Hello {{name}}, your code is {{code}}"
+
+# CSV with per-row messages (no default template needed)
+bun run wspp --csv contacts.csv
+```
+
+**CSV format:**
+
+```csv
+phone,name,message
++51987654321,Juan,"Hi {{name}}, your appointment is tomorrow"
++56912345678,María,
++1234567890,Mike,"{{name}}, your order #{{code}} is ready"
+```
+
+- `phone` or `name` required (at least one per row)
+- `message` column optional — overrides the default template for that row
+- Any extra column (e.g. `code`, `company`) can be used as `{{variable}}` in templates
+- Empty `message` cells fall back to the default template from the CLI
+
+See [Anti-ban tips](#anti-ban-tips) before sending to large lists.
+
+### 4. Schedule a message for later
 
 Send birthday wishes, reminders, or timed notifications.
 
@@ -83,7 +114,7 @@ bun run wspp "Team Lead" "Daily standup reminder" --at 09:00
 
 Shows a real-time countdown in the terminal until the message is sent.
 
-### 4. Browse and search contacts
+### 5. Browse and search contacts
 
 ```bash
 # List your 10 most recent chats
@@ -105,7 +136,7 @@ Output:
 ╚══════╩════════════════════════════╝
 ```
 
-### 5. Interactive mode (full menu)
+### 6. Interactive mode (full menu)
 
 For when you want to browse, select, and send without memorizing commands.
 
@@ -120,7 +151,7 @@ Features:
 - Confirmation before sending
 - Stays open for multiple actions
 
-### 6. First-time setup
+### 7. First-time setup
 
 ```bash
 bun run wspp:login
@@ -138,6 +169,8 @@ Opens a visible Chrome window. Scan the QR code with your phone. Session is save
 | `bun run wspp "Name" "msg"` | Send by name |
 | `bun run wspp 3 "msg"` | Send by position |
 | `bun run wspp 1,3,5 "msg"` | Bulk send |
+| `bun run wspp --csv file.csv "msg"` | Bulk send from CSV |
+| `bun run wspp --csv file.csv --dry-run "msg"` | Preview CSV (no send) |
 | `bun run wspp 3 "msg" --at 08:00` | Scheduled send |
 | `bun run wspp:i` | Interactive mode |
 | `bun run wspp:debug` | Debug with screenshots |
@@ -182,6 +215,43 @@ bun run wspp:login
 
 MIT
 
+## Anti-ban Tips
+
+This tool automates a real Chrome browser via Puppeteer — WhatsApp sees the same fingerprint as a regular user. However, **no tool can guarantee your account won't be restricted**. Sending too many messages too fast is the #1 cause of bans.
+
+### Built-in protections
+
+- **Random delays (3–7s)** between each message in bulk/CSV mode
+- **Warning at 50+ messages** per session
+- **`--dry-run` flag** to verify your CSV before sending anything
+
+### Best practices
+
+| | Recommendation |
+|---|---|
+| **Volume** | Stay under 50 messages per session. For larger lists, split into batches with hours between them |
+| **Personalization** | Use `{{name}}` and other template variables — identical messages to many people trigger spam detection |
+| **Recipients** | Sending to contacts who already have you saved is much safer than cold-messaging new numbers |
+| **Account type** | WhatsApp Business accounts have higher tolerance than personal accounts |
+| **Timing** | Don't send at 3 AM — unusual hours draw attention |
+| **Frequency** | Avoid daily mass sends. Spread campaigns across days |
+| **Reports** | If even one recipient reports you as spam, it weighs heavily. Only message people who expect it |
+
+### Risk levels
+
+| Low risk (< 20/day) | Medium risk (20–50) | High risk (50+) |
+|---|---|---|
+| Contacts who have you saved | Mix of known and new numbers | All new numbers |
+| Every message is different | Template with `{{name}}` | Same text to everyone |
+| Old account with history | Account a few months old | New account |
+
+### If you get a temporary ban
+
+1. **Stop immediately** — don't try to send more
+2. Wait the full restriction period (usually 24–48h)
+3. Reduce your volume by 50% when you resume
+4. Add more personalization to your messages
+
 ## Disclaimer
 
-Educational project. Use responsibly and in compliance with WhatsApp's Terms of Service.
+This project automates WhatsApp Web via browser — it does not use official WhatsApp APIs. Use responsibly and in compliance with [WhatsApp's Terms of Service](https://www.whatsapp.com/legal/terms-of-service). The authors are not responsible for any account restrictions resulting from misuse.
