@@ -1,29 +1,16 @@
 {
-  "name": "puppeteer-demo",
-  "version": "0.1.0",
+  "name": "wspp-cli",
+  "version": "1.0.0",
+  "description": "WhatsApp Web CLI automation tool powered by Puppeteer + Bun",
   "module": "index.ts",
   "type": "module",
   "private": true,
-  "bin": {
-    "demo": "index.ts"
-  },
   "scripts": {
-    "demo": "bun run src/commands/demo.ts",
-    "scrape": "bun run src/commands/scrape.ts",
-    "search": "bun run src/commands/search.ts",
-    "screenshot": "bun run src/commands/screenshot.ts",
-    "interact": "bun run src/commands/interact.ts",
-    "whatsapp": "bun run src/commands/whatsapp.ts",
-    "whatsapp:simple": "bun run src/commands/whatsapp-simple.ts",
-    "whatsapp:send": "bun run src/commands/whatsapp-send.ts",
-    "whatsapp:send2": "bun run src/commands/whatsapp-send-v2.ts",
-    "whatsapp:url": "bun run src/commands/whatsapp-send-url.ts",
-    "whatsapp:manual": "bun run src/commands/whatsapp-manual.ts",
-    "whatsapp:auto": "bun run src/commands/whatsapp-auto.ts",
     "wspp": "bun run src/commands/wspp.ts",
     "wspp:login": "bun run src/commands/wspp-login.ts",
     "wspp:contacts": "bun run src/commands/wspp-contacts.ts",
-    "wspp:debug": "bun run src/commands/wspp-debug.ts"
+    "wspp:debug": "bun run src/commands/wspp-debug.ts",
+    "wspp:i": "bun run src/commands/wspp-interactive.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"
