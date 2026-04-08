@@ -1,14 +1,19 @@
 import type { Page } from "puppeteer-core";
 
+export interface Contact {
+  name: string;
+  phone: string;
+}
+
 const NOISE = [
   "you", "aún no", "hola desde", "http", "buscar", "search",
   "chats", "loading", "waiting for", "this may take", "pollito",
   "convertido", "omg", "no hay mensajes",
 ];
 
-export async function extractContacts(page: Page, max = 10): Promise<string[]> {
+export async function extractContacts(page: Page, max = 10): Promise<Contact[]> {
   const raw = await page.evaluate(() => {
-    const results: string[] = [];
+    const results: Array<{ name: string; phone: string }> = [];
     const seen = new Set<string>();
 
     const chatRows = document.querySelectorAll('[role="listitem"], [data-testid^="cell-frame-container"]');
@@ -24,7 +29,25 @@ export async function extractContacts(page: Page, max = 10): Promise<string[]> {
 
       if (!name || seen.has(name) || name.length > 60 || name.startsWith('http')) return;
       seen.add(name);
-      results.push(name);
+
+      // Try to extract phone number from data-id on the row or parent
+      let phone = '';
+      const el = row as HTMLElement;
+      // WhatsApp stores chat IDs like "5199999999@c.us" or "5199999999@s.whatsapp.net"
+      const dataId = el.getAttribute('data-id')
+        || el.querySelector('[data-id]')?.getAttribute('data-id')
+        || '';
+      const phoneMatch = dataId.match(/(\d{7,15})@/);
+      if (phoneMatch) {
+        phone = '+' + phoneMatch[1];
+      }
+
+      // If the name itself looks like a phone number, use it as phone too
+      if (!phone && /^\+?\d[\d\s\-()]{6,}$/.test(name)) {
+        phone = name.replace(/[\s\-()]/g, '');
+      }
+
+      results.push({ name, phone });
     });
 
     if (results.length === 0) {
@@ -37,7 +60,8 @@ export async function extractContacts(page: Page, max = 10): Promise<string[]> {
               && !text.startsWith('http') && !text.includes('Buscar')
               && !text.includes('Search')) {
             seen.add(text);
-            results.push(text);
+            const isPhone = /^\+?\d[\d\s\-()]{6,}$/.test(text);
+            results.push({ name: text, phone: isPhone ? text.replace(/[\s\-()]/g, '') : '' });
           }
         });
       }
@@ -47,7 +71,7 @@ export async function extractContacts(page: Page, max = 10): Promise<string[]> {
   });
 
   return raw
-    .filter(name => {
+    .filter(({ name }) => {
       const lower = name.toLowerCase();
       if (NOISE.some(n => lower.includes(n))) return false;
       if (name.length <= 1) return false;

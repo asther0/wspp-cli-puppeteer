@@ -88,7 +88,7 @@ async function wsppCli() {
         throw new Error(`Posición #${pos} inválida. Solo hay ${contacts.length} contactos. Usa: bun run wspp:contacts`);
       }
 
-      contactName = contacts[pos - 1];
+      contactName = contacts[pos - 1].name;
       spinner.succeed(chalk.green(`✓ Contacto #${pos}: ${contactName}`));
     } else {
       contactName = firstArg;

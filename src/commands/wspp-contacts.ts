@@ -80,27 +80,40 @@ async function wsppContacts() {
         console.log(chalk.gray(`  Intenta con otro término en vez de "${keyword}"\n`));
       }
     } else {
-      const maxLen = Math.max(...filtered.map(n => n.length), 20);
-      const colW = Math.max(maxLen + 2, 40);
+      const nameW = Math.max(...filtered.map(c => c.name.length), 20) + 2;
+      const phoneW = 18;
       const numW = 4;
 
-      const line = (l: string, m: string, r: string, fill: string) =>
-        l + fill.repeat(numW + 2) + m + fill.repeat(colW + 2) + r;
+      const line = (l: string, c1: string, c2: string, r: string, fill: string) =>
+        l + fill.repeat(numW + 2) + c1 + fill.repeat(nameW + 2) + c2 + fill.repeat(phoneW + 2) + r;
 
-      console.log(chalk.cyan("\n" + line("╔", "╦", "╗", "═")));
-      console.log(chalk.cyan("║") + chalk.bold.white(" #".padEnd(numW + 2)) + chalk.cyan("║") + chalk.bold.white(" Contacto".padEnd(colW + 2)) + chalk.cyan("║"));
-      console.log(chalk.cyan(line("╠", "╬", "╣", "═")));
+      console.log(chalk.cyan("\n" + line("╔", "╦", "╦", "╗", "═")));
+      console.log(
+        chalk.cyan("║") + chalk.bold.white(" #".padEnd(numW + 2)) +
+        chalk.cyan("║") + chalk.bold.white(" Contacto".padEnd(nameW + 2)) +
+        chalk.cyan("║") + chalk.bold.white(" Teléfono".padEnd(phoneW + 2)) +
+        chalk.cyan("║")
+      );
+      console.log(chalk.cyan(line("╠", "╬", "╬", "╣", "═")));
 
-      filtered.forEach((name, i) => {
+      filtered.forEach((c, i) => {
         const num = ` ${String(i + 1).padEnd(numW + 1)}`;
-        const col = ` ${name.padEnd(colW + 1)}`;
-        console.log(chalk.cyan("║") + chalk.white(num) + chalk.cyan("║") + chalk.green(col) + chalk.cyan("║"));
+        const name = ` ${c.name.padEnd(nameW + 1)}`;
+        const phone = ` ${(c.phone || "—").padEnd(phoneW + 1)}`;
+        console.log(
+          chalk.cyan("║") + chalk.white(num) +
+          chalk.cyan("║") + chalk.green(name) +
+          chalk.cyan("║") + chalk.gray(phone) +
+          chalk.cyan("║")
+        );
       });
 
-      console.log(chalk.cyan(line("╚", "╩", "╝", "═")));
+      console.log(chalk.cyan(line("╚", "╩", "╩", "╝", "═")));
 
       console.log(chalk.bold.yellow("\n💡 Para enviar mensaje:"));
-      console.log(chalk.gray(`   bun run wspp 3 "Tu mensaje aquí"  → envía al contacto #3\n`));
+      console.log(chalk.gray('   bun run wspp 3 "mensaje"              → por posición'));
+      console.log(chalk.gray('   bun run wspp "Lywinecito" "mensaje"   → por nombre'));
+      console.log(chalk.gray('   bun run wspp "+51999..." "mensaje"    → por teléfono\n'));
     }
 
   } catch (error: any) {
