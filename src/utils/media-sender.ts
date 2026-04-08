@@ -7,8 +7,8 @@ const IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".mov"];
 const DOC_EXTS = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".zip", ".rar", ".txt", ".csv"];
 const MAX_FILE_SIZE = 16 * 1024 * 1024; // 16 MB
 
-// "plus" is emoji/sticker — NOT the attach button. Use "attach-menu-plus" or "clip".
-const ATTACH_ICONS = ["attach-menu-plus", "clip", "attach"];
+// Real WhatsApp Web icon: "plus-rounded" (discovered via wspp:debug-icons)
+const ATTACH_ICONS = ["plus-rounded", "attach-menu-plus", "clip", "attach"];
 
 // Candidate selectors for each menu option
 const IMAGE_OPTION_ICONS = ["attach-image", "image", "gallery", "media", "attach-photo"];
@@ -365,17 +365,34 @@ export async function sendPoll(page: Page, question: string, options: string[]):
 
   await delay(500);
 
-  // Click send
+  // Click send — the poll modal button may differ from the regular send icon
   const sent = await page.evaluate(() => {
+    // 1. Try the regular send icon
     const sendIcon = document.querySelector('span[data-icon="send"]');
     if (sendIcon) {
       const btn = sendIcon.closest("button") || sendIcon.parentElement;
-      if (btn) {
+      if (btn) { (btn as HTMLElement).click(); return "send-icon"; }
+    }
+
+    // 2. Try submit button by aria-label
+    const allBtns = document.querySelectorAll('button, [role="button"]');
+    for (const btn of allBtns) {
+      const label = (btn.getAttribute("aria-label") || btn.getAttribute("title") || "").toLowerCase();
+      if (label.includes("enviar encuesta") || label.includes("send poll") || label.includes("crear") || label.includes("create")) {
         (btn as HTMLElement).click();
-        return true;
+        return "aria-label";
       }
     }
-    return false;
+
+    // 3. Try the last/bottom button inside a dialog or overlay (usually the submit)
+    const dialog = document.querySelector('[role="dialog"]') || document.querySelector('.overlay');
+    if (dialog) {
+      const btns = dialog.querySelectorAll('button, [role="button"]');
+      const lastBtn = btns[btns.length - 1];
+      if (lastBtn) { (lastBtn as HTMLElement).click(); return "last-btn"; }
+    }
+
+    return null;
   });
 
   if (!sent) {

@@ -87,7 +87,7 @@ async function debugIcons() {
 
     // Step 3: Try clicking attach button candidates
     console.log(chalk.cyan("\n  ─── Probando botón adjuntar ───"));
-    const attachCandidates = ["plus", "attach-menu-plus", "clip", "attach", "ptt"];
+    const attachCandidates = ["plus-rounded", "plus", "attach-menu-plus", "clip", "attach", "ptt"];
 
     let attachClicked = false;
     for (const icon of attachCandidates) {
