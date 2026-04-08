@@ -220,108 +220,101 @@ export async function sendPoll(page: Page, question: string, options: string[]):
     });
   }
 
-  await delay(2000);
+  await delay(3000);
 
-  // Fill question — first textbox in the poll modal
-  const textboxes = await page.$$('[role="dialog"] [role="textbox"], .overlay [role="textbox"]');
+  // Fill question — find textboxes inside the poll modal
+  // Use broad selectors: dialog, overlay, or any modal-like container
+  const TEXTBOX_SEL = '[role="dialog"] [role="textbox"], .overlay [role="textbox"], [data-animate-modal-popup] [role="textbox"]';
+  const textboxes = await page.$$(TEXTBOX_SEL);
 
   if (textboxes.length === 0) {
-    throw new Error(
-      "No se encontró el modal de encuesta. Las encuestas solo funcionan en grupos.",
-    );
-  }
+    // Retry once with broader selector (community groups may use different containers)
+    await delay(2000);
+    const allTextboxes = await page.$$('[role="textbox"][contenteditable="true"]');
+    // Filter out the main chat textbox (in footer)
+    const modalBoxes = [];
+    for (const box of allTextboxes) {
+      const inFooter = await box.evaluate((el) => !!el.closest("footer"));
+      if (!inFooter) modalBoxes.push(box);
+    }
 
-  // First textbox = question
-  await textboxes[0].click();
-  await delay(300);
-  await page.keyboard.type(question, { delay: 30 });
+    if (modalBoxes.length === 0) {
+      throw new Error(
+        "No se encontró el modal de encuesta. Las encuestas solo funcionan en grupos.",
+      );
+    }
 
-  // Remaining textboxes = options (WhatsApp shows 2 by default, adds more as you type)
-  for (let i = 0; i < options.length; i++) {
-    // Get fresh list of textboxes (new ones appear as you fill)
-    const currentBoxes = await page.$$('[role="dialog"] [role="textbox"], .overlay [role="textbox"]');
-    const optionBox = currentBoxes[i + 1]; // +1 because first is the question
+    // Use the filtered boxes
+    await modalBoxes[0].click();
+    await delay(300);
+    await page.keyboard.type(question, { delay: 30 });
 
-    if (optionBox) {
-      await optionBox.click();
-      await delay(200);
-      await page.keyboard.type(options[i], { delay: 30 });
-      await delay(300);
+    for (let i = 0; i < options.length; i++) {
+      const freshBoxes = await page.$$('[role="textbox"][contenteditable="true"]');
+      const freshModal = [];
+      for (const box of freshBoxes) {
+        const inFooter = await box.evaluate((el) => !!el.closest("footer"));
+        if (!inFooter) freshModal.push(box);
+      }
+      const optionBox = freshModal[i + 1];
+      if (optionBox) {
+        await optionBox.click();
+        await delay(200);
+        await page.keyboard.type(options[i], { delay: 30 });
+        await delay(300);
+      }
+    }
+  } else {
+    // First textbox = question
+    await textboxes[0].click();
+    await delay(300);
+    await page.keyboard.type(question, { delay: 30 });
+
+    // Remaining textboxes = options (WhatsApp shows 2 by default, adds more as you type)
+    for (let i = 0; i < options.length; i++) {
+      // Get fresh list of textboxes (new ones appear as you fill)
+      const currentBoxes = await page.$$(TEXTBOX_SEL);
+      const optionBox = currentBoxes[i + 1]; // +1 because first is the question
+
+      if (optionBox) {
+        await optionBox.click();
+        await delay(200);
+        await page.keyboard.type(options[i], { delay: 30 });
+        await delay(300);
+      }
     }
   }
 
-  await delay(500);
+  await delay(1000);
 
-  // Debug: capture poll modal state before clicking send
-  const pollDebug = await page.evaluate(() => {
-    const btns = document.querySelectorAll('button, [role="button"]');
-    const info: string[] = [];
-    btns.forEach((btn) => {
-      const label = btn.getAttribute("aria-label") || "";
-      const title = btn.getAttribute("title") || "";
-      const icon = btn.querySelector("span[data-icon]")?.getAttribute("data-icon") || "";
-      const text = (btn as HTMLElement).innerText?.trim().substring(0, 40) || "";
-      if (label || icon || text) {
-        info.push(`[${icon || "-"}] aria="${label}" title="${title}" text="${text}"`);
-      }
-    });
-    return info;
-  });
-  console.log("\n  [debug-poll] Botones visibles:");
-  pollDebug.forEach((b) => console.log(`    ${b}`));
-
-  // Click send — search broadly for the poll submit button
+  // Click send — use the exact data-icon discovered: "wds-ic-send-filled"
   const sent = await page.evaluate(() => {
-    // 1. Try send icon inside a dialog/overlay/popup (poll modal context)
-    const containers = document.querySelectorAll('[role="dialog"], [data-animate-modal-popup="true"], .overlay, ._3J6wB');
-    for (const container of containers) {
-      const sendIcon = container.querySelector('span[data-icon="send"]');
-      if (sendIcon) {
-        const btn = sendIcon.closest("button") || sendIcon.parentElement;
-        if (btn) { (btn as HTMLElement).click(); return "dialog-send-icon"; }
-      }
+    // 1. Try the exact poll send icon (discovered via debug)
+    const exactIcon = document.querySelector('span[data-icon="wds-ic-send-filled"]');
+    if (exactIcon) {
+      const btn = exactIcon.closest("button") || exactIcon.parentElement;
+      if (btn) { (btn as HTMLElement).click(); return "wds-ic-send-filled"; }
     }
 
-    // 2. Try any send icon on the page
+    // 2. Fallback: try classic send icon
     const sendIcon = document.querySelector('span[data-icon="send"]');
     if (sendIcon) {
       const btn = sendIcon.closest("button") || sendIcon.parentElement;
       if (btn) { (btn as HTMLElement).click(); return "send-icon"; }
     }
 
-    // 3. Try submit button by aria-label (broad: "send", "enviar", "crear", "create")
+    // 3. Try button with aria-label "Send" or "Enviar"
     const allBtns = document.querySelectorAll('button, [role="button"]');
     for (const btn of allBtns) {
-      const label = (btn.getAttribute("aria-label") || btn.getAttribute("title") || "").toLowerCase();
-      if (label === "send" || label === "enviar" || label.includes("enviar encuesta") || label.includes("send poll") || label.includes("crear encuesta") || label.includes("create poll")) {
+      const label = (btn.getAttribute("aria-label") || "").toLowerCase();
+      if (label === "send" || label === "enviar") {
         (btn as HTMLElement).click();
         return `aria: ${label}`;
       }
     }
 
-    // 4. Try button with text "Send" or "Enviar" inside a dialog
-    for (const container of containers) {
-      const btns = container.querySelectorAll('button, [role="button"]');
-      for (const btn of btns) {
-        const text = (btn as HTMLElement).innerText?.trim().toLowerCase() || "";
-        if (text === "send" || text === "enviar" || text.includes("send poll") || text.includes("enviar encuesta")) {
-          (btn as HTMLElement).click();
-          return `text: ${text}`;
-        }
-      }
-    }
-
-    // 5. Last resort: bottom-most button inside a dialog
-    for (const container of containers) {
-      const btns = container.querySelectorAll('button, [role="button"]');
-      const lastBtn = btns[btns.length - 1];
-      if (lastBtn) { (lastBtn as HTMLElement).click(); return "last-btn"; }
-    }
-
     return null;
   });
-
-  console.log(`  [debug-poll] Resultado envío: ${sent || "null (fallback Enter)"}`);
 
   if (!sent) {
     await page.keyboard.press("Enter");
