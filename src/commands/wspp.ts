@@ -2,7 +2,7 @@ import chalk from "chalk";
 import ora from "ora";
 import { launchBrowser, closeBrowser, hasSession } from "../utils/browser";
 import { extractContacts } from "../utils/contacts";
-import { sendMessage } from "../utils/sender";
+import { sendMessage, sendMessageByPhone } from "../utils/sender";
 import { sendBulkMessages } from "../utils/bulk-sender";
 import { showBanner } from "../ui/banner";
 import type { Page } from "puppeteer-core";
@@ -50,13 +50,15 @@ function parseArgs() {
   // Detect bulk (comma-separated)
   const isBulk = firstArg.includes(",");
   const targets = isBulk ? firstArg.split(",").map(t => t.trim()) : [];
-  const isPositional = !isBulk && /^\d+$/.test(firstArg);
+  // Phone: starts with + or has 7+ digits (longer than any sidebar position)
+  const isPhone = !isBulk && /^\+\d{7,}$/.test(firstArg.replace(/[\s\-()]/g, ''));
+  const isPositional = !isBulk && !isPhone && /^\d+$/.test(firstArg);
 
-  return { firstArg, message, isBulk, targets, isPositional, scheduleTime };
+  return { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime };
 }
 
 async function wsppCli() {
-  const { firstArg, message, isBulk, targets, isPositional, scheduleTime } = parseArgs();
+  const { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime } = parseArgs();
 
   if (!firstArg || !message) {
     showBanner();
@@ -64,6 +66,7 @@ async function wsppCli() {
     console.log(chalk.yellow("  📝 Uso:"));
     console.log(chalk.gray('     bun run wspp "Contacto" "Mensaje"      → por nombre'));
     console.log(chalk.gray('     bun run wspp 3 "Mensaje"               → por posición (#)'));
+    console.log(chalk.gray('     bun run wspp +51987654321 "Mensaje"    → por teléfono'));
     console.log(chalk.gray('     bun run wspp 1,3,5 "Mensaje"           → envío masivo'));
     console.log(chalk.gray('     bun run wspp 3 "Msg" --at 08:00       → programado'));
     console.log(chalk.gray('     bun run wspp:contacts                  → ver contactos'));
@@ -75,6 +78,8 @@ async function wsppCli() {
 
   if (isBulk) {
     console.log(chalk.cyan("  📨 Envío masivo:"), `${targets.length} destinatarios`);
+  } else if (isPhone) {
+    console.log(chalk.cyan("  📞 Para:"), firstArg);
   } else if (isPositional) {
     console.log(chalk.cyan("  📱 Para:"), `contacto #${firstArg}`);
   } else {
@@ -136,7 +141,11 @@ async function wsppCli() {
       // Single mode
       let contactName: string;
 
-      if (isPositional) {
+      if (isPhone) {
+        contactName = firstArg;
+        spinner.start(`Enviando a ${firstArg}...`);
+        await sendMessageByPhone(page, firstArg, message);
+      } else if (isPositional) {
         const pos = parseInt(firstArg, 10);
         spinner.start("Obteniendo lista de contactos...");
         const contacts = await extractContacts(page);
@@ -148,8 +157,6 @@ async function wsppCli() {
         contactName = contacts[pos - 1].name;
         spinner.succeed(chalk.green(`Contacto #${pos}: ${contactName}`));
 
-        // Use name-based search — position-based DOM click is unreliable
-        // because [role="listitem"] may not exist in current WhatsApp Web DOM
         spinner.start(`Enviando a "${contactName}"...`);
         await sendMessage(page, contactName, message);
       } else {

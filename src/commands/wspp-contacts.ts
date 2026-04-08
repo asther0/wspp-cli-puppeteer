@@ -136,7 +136,7 @@ async function wsppContacts() {
         console.log(chalk.cyan(line("╚", "╩", "╝", "═")));
       }
 
-      console.log(chalk.dim('\n  Uso: bun run wspp 3 "mensaje" · bun run wspp "nombre" "mensaje"\n'));
+      console.log(chalk.dim('\n  Uso: bun run wspp 3 "mensaje" · bun run wspp "nombre" "mensaje" · bun run wspp +51... "mensaje"\n'));
     }
 
   } catch (error: any) {

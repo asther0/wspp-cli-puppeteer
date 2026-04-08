@@ -260,6 +260,48 @@ export async function selectContactByPosition(page: Page, position: number): Pro
   }
 }
 
+export async function sendMessageByPhone(page: Page, phone: string, message: string): Promise<void> {
+  // Normalize: remove spaces, dashes, parens; ensure no leading +
+  const digits = phone.replace(/[\s\-()]/g, '');
+  const phoneNumber = digits.startsWith('+') ? digits.slice(1) : digits;
+
+  // Use WhatsApp's direct chat URL — opens the chat without searching
+  await page.goto(`https://web.whatsapp.com/send?phone=${phoneNumber}`, {
+    waitUntil: "networkidle2",
+  });
+  await delay(5000);
+
+  // WhatsApp may show an invalid number popup
+  const invalid = await page.evaluate(() => {
+    const popup = document.querySelector('[data-testid="popup-controls-ok"]');
+    if (popup) {
+      (popup as HTMLElement).click();
+      return true;
+    }
+    return false;
+  });
+
+  if (invalid) {
+    throw new Error(`Número inválido: ${phone}. Verifica el código de país.`);
+  }
+
+  // Verify message box appeared
+  const hasMessageBox = await page.evaluate(() => {
+    const footer = document.querySelector('footer');
+    if (footer) {
+      const box = footer.querySelector('[role="textbox"], [contenteditable="true"]');
+      if (box) return true;
+    }
+    return false;
+  });
+
+  if (!hasMessageBox) {
+    throw new Error(`No se pudo abrir chat con ${phone}. Verifica el número.`);
+  }
+
+  await typeAndSendMessage(page, message);
+}
+
 export async function sendMessage(page: Page, contactName: string, message: string): Promise<void> {
   await searchAndSelectContact(page, contactName);
   await typeAndSendMessage(page, message);
