@@ -1,18 +1,11 @@
-import path from "path";
-import type { Page, ElementHandle } from "puppeteer-core";
+import type { Page } from "puppeteer-core";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".mov"];
-const DOC_EXTS = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".zip", ".rar", ".txt", ".csv"];
-const MAX_FILE_SIZE = 16 * 1024 * 1024; // 16 MB
 
 // Real WhatsApp Web icon: "plus-rounded" (discovered via wspp:debug-icons)
 const ATTACH_ICONS = ["plus-rounded", "attach-menu-plus", "clip", "attach"];
 
-// Candidate selectors for each menu option
-const IMAGE_OPTION_ICONS = ["attach-image", "image", "gallery", "media", "attach-photo"];
-const DOC_OPTION_ICONS = ["attach-document", "document", "attach-file"];
+// Candidate selectors for each menu option (data-icon based, fallback to text/aria)
 const POLL_OPTION_ICONS = ["poll", "attach-poll"];
 const CAMERA_OPTION_ICONS = ["attach-camera", "camera"];
 
@@ -48,30 +41,6 @@ async function listVisibleIcons(page: Page): Promise<string[]> {
   });
 }
 
-/**
- * Validate a file before attempting upload.
- */
-async function validateFile(filePath: string, allowedExts: string[]): Promise<string> {
-  const resolved = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
-  const file = Bun.file(resolved);
-
-  if (!(await file.exists())) {
-    throw new Error(`Archivo no encontrado: ${filePath}`);
-  }
-
-  const ext = path.extname(resolved).toLowerCase();
-  if (!allowedExts.includes(ext)) {
-    throw new Error(`Extensión no soportada: ${ext}. Permitidas: ${allowedExts.join(", ")}`);
-  }
-
-  const size = file.size;
-  if (size > MAX_FILE_SIZE) {
-    const mb = (size / 1024 / 1024).toFixed(1);
-    throw new Error(`Archivo muy grande: ${mb}MB (máximo 16MB)`);
-  }
-
-  return resolved;
-}
 
 /**
  * Click the attachment button in the chat footer.
@@ -122,33 +91,6 @@ async function clickAttachButton(page: Page): Promise<void> {
   );
 }
 
-/**
- * Find and use a file input to upload a file.
- * WhatsApp creates hidden <input type="file"> elements when menu options are clicked.
- */
-async function uploadToFileInput(page: Page, filePath: string, accept?: string): Promise<boolean> {
-  // Wait for file input to appear
-  await delay(500);
-
-  const selector = accept
-    ? `input[type="file"][accept*="${accept}"]`
-    : 'input[type="file"]';
-
-  const fileInput = await page.$(selector);
-  if (fileInput) {
-    await (fileInput as ElementHandle<HTMLInputElement>).uploadFile(filePath);
-    return true;
-  }
-
-  // Fallback: try any file input
-  const anyInput = await page.$('input[type="file"]');
-  if (anyInput) {
-    await (anyInput as ElementHandle<HTMLInputElement>).uploadFile(filePath);
-    return true;
-  }
-
-  return false;
-}
 
 /**
  * Type a caption in the media preview modal and send.
@@ -254,61 +196,6 @@ async function clickMenuOption(page: Page, iconCandidates: string[], textPattern
 }
 
 /**
- * Send an image (or video) with optional caption.
- * Uses waitForFileChooser to reliably intercept the file dialog.
- */
-export async function sendImage(page: Page, filePath: string, caption?: string): Promise<void> {
-  const resolved = await validateFile(filePath, IMAGE_EXTS);
-
-  await clickAttachButton(page);
-
-  // Set up file chooser interceptor BEFORE clicking the menu option
-  const fileChooserPromise = page.waitForFileChooser({ timeout: 8000 }).catch(() => null);
-
-  await clickMenuOption(page, IMAGE_OPTION_ICONS, /foto|photo|image|video|media|galería|gallery/);
-  await delay(500);
-
-  const fileChooser = await fileChooserPromise;
-  if (fileChooser) {
-    await fileChooser.accept([resolved]);
-  } else {
-    // Fallback: try direct input upload
-    const uploaded = await uploadToFileInput(page, resolved, "image");
-    if (!uploaded) {
-      throw new Error("No se pudo subir la imagen. Ejecuta: bun run wspp:debug-icons");
-    }
-  }
-
-  await typeCaptionAndSend(page, caption);
-}
-
-/**
- * Send a document (PDF, etc.) with optional caption.
- */
-export async function sendDocument(page: Page, filePath: string, caption?: string): Promise<void> {
-  const resolved = await validateFile(filePath, DOC_EXTS);
-
-  await clickAttachButton(page);
-
-  const fileChooserPromise = page.waitForFileChooser({ timeout: 8000 }).catch(() => null);
-
-  await clickMenuOption(page, DOC_OPTION_ICONS, /document|archivo|file/);
-  await delay(500);
-
-  const fileChooser = await fileChooserPromise;
-  if (fileChooser) {
-    await fileChooser.accept([resolved]);
-  } else {
-    const uploaded = await uploadToFileInput(page, resolved);
-    if (!uploaded) {
-      throw new Error("No se pudo subir el documento. Ejecuta: bun run wspp:debug-icons");
-    }
-  }
-
-  await typeCaptionAndSend(page, caption);
-}
-
-/**
  * Send a poll (group chats only).
  */
 export async function sendPoll(page: Page, question: string, options: string[]): Promise<void> {
@@ -404,28 +291,45 @@ export async function sendPoll(page: Page, question: string, options: string[]):
 
 /**
  * Take a photo with the camera and send it.
+ * Includes a visible countdown timer before capture.
  * Requires visible browser (not headless/background mode).
  */
-export async function sendCameraPhoto(page: Page, caption?: string): Promise<void> {
+export async function sendCameraPhoto(page: Page, timerSeconds = 3, caption?: string): Promise<void> {
   await clickAttachButton(page);
 
   const clicked = await clickByIconCandidates(page, CAMERA_OPTION_ICONS);
 
   if (!clicked) {
-    await page.evaluate(() => {
-      const items = document.querySelectorAll('[role="button"], li, [role="menuitem"]');
-      for (const item of items) {
-        const text = (item as HTMLElement).innerText || "";
-        if (/cámara|camera/i.test(text)) {
-          (item as HTMLElement).click();
-          return;
-        }
-      }
-    });
+    await clickMenuOption(page, CAMERA_OPTION_ICONS, /cámara|camera/);
   }
 
   // Wait for camera to activate
   await delay(4000);
+
+  // Countdown timer — overlay on the page so the user sees it
+  if (timerSeconds > 0) {
+    for (let i = timerSeconds; i > 0; i--) {
+      await page.evaluate((num: number) => {
+        let overlay = document.getElementById("wspp-timer-overlay");
+        if (!overlay) {
+          overlay = document.createElement("div");
+          overlay.id = "wspp-timer-overlay";
+          overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;z-index:99999;pointer-events:none;";
+          document.body.appendChild(overlay);
+        }
+        overlay.innerHTML = `<span style="font-size:120px;font-weight:bold;color:#fff;text-shadow:0 0 40px rgba(0,0,0,0.8),0 0 10px rgba(0,0,0,0.6);">${num}</span>`;
+      }, i);
+      // Also log to terminal
+      process.stdout.write(`\r  ⏱️  Capturando en ${i}...`);
+      await delay(1000);
+    }
+    process.stdout.write(`\r  📸 Capturando!       \n`);
+
+    // Remove overlay
+    await page.evaluate(() => {
+      document.getElementById("wspp-timer-overlay")?.remove();
+    });
+  }
 
   // Click capture button (large circular button)
   const captured = await page.evaluate(() => {

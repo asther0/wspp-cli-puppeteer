@@ -5,7 +5,7 @@ import { extractContacts } from "../utils/contacts";
 import { sendMessage, sendMessageByPhone, searchAndSelectContact } from "../utils/sender";
 import { sendBulkMessages, sendCsvMessages } from "../utils/bulk-sender";
 import { parseCsv } from "../utils/csv-parser";
-import { sendImage, sendDocument, sendPoll, sendCameraPhoto } from "../utils/media-sender";
+import { sendPoll, sendCameraPhoto } from "../utils/media-sender";
 import { showBanner } from "../ui/banner";
 import type { Page } from "puppeteer-core";
 
@@ -62,22 +62,6 @@ async function parseArgs() {
     args.splice(fileIdx, 2);
   }
 
-  // Extract --image flag
-  let imagePath: string | null = null;
-  const imgIdx = args.indexOf("--image");
-  if (imgIdx !== -1 && args[imgIdx + 1]) {
-    imagePath = args[imgIdx + 1];
-    args.splice(imgIdx, 2);
-  }
-
-  // Extract --doc flag
-  let docPath: string | null = null;
-  const docIdx = args.indexOf("--doc");
-  if (docIdx !== -1 && args[docIdx + 1]) {
-    docPath = args[docIdx + 1];
-    args.splice(docIdx, 2);
-  }
-
   // Extract --poll flag (consumes next 2 args: question and options)
   let pollQuestion: string | null = null;
   let pollOptions: string[] = [];
@@ -88,12 +72,18 @@ async function parseArgs() {
     args.splice(pollIdx, 3);
   }
 
-  // Extract --camera flag
+  // Extract --camera flag with optional --timer N (default 3s)
   let useCamera = false;
+  let cameraTimer = 3;
   const camIdx = args.indexOf("--camera");
   if (camIdx !== -1) {
     useCamera = true;
     args.splice(camIdx, 1);
+  }
+  const timerIdx = args.indexOf("--timer");
+  if (timerIdx !== -1 && args[timerIdx + 1]) {
+    cameraTimer = Math.max(0, parseInt(args[timerIdx + 1], 10) || 3);
+    args.splice(timerIdx, 2);
   }
 
   // Extract --dry-run flag
@@ -131,13 +121,13 @@ async function parseArgs() {
   const isPositional = !isBulk && !csvPath && !isPhone && /^\d+$/.test(firstArg);
 
   // Media flags allow sending without a text message
-  const hasMedia = !!(imagePath || docPath || pollQuestion || useCamera);
+  const hasMedia = !!(pollQuestion || useCamera);
 
-  return { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun, imagePath, docPath, pollQuestion, pollOptions, useCamera, hasMedia };
+  return { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun, pollQuestion, pollOptions, useCamera, cameraTimer, hasMedia };
 }
 
 async function wsppCli() {
-  const { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun, imagePath, docPath, pollQuestion, pollOptions, useCamera, hasMedia } = await parseArgs();
+  const { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun, pollQuestion, pollOptions, useCamera, cameraTimer, hasMedia } = await parseArgs();
 
   // CSV mode: only needs --csv flag (message is optional template)
   if (csvPath) {
@@ -198,10 +188,9 @@ async function wsppCli() {
     console.log(chalk.gray('     bun run wspp "+51...,+56..." "Mensaje"    → masivo por tel'));
     console.log(chalk.gray('     bun run wspp --csv contactos.csv "Hola"   → masivo desde CSV'));
     console.log(chalk.gray('     bun run wspp 3 --file msg.txt            → mensaje desde archivo'));
-    console.log(chalk.gray('     bun run wspp 3 --image foto.jpg "Caption" → enviar imagen'));
-    console.log(chalk.gray('     bun run wspp 3 --doc archivo.pdf          → enviar documento'));
     console.log(chalk.gray('     bun run wspp "Grupo" --poll "?" "a,b,c"   → encuesta'));
     console.log(chalk.gray('     bun run wspp 3 --camera                   → foto con cámara'));
+    console.log(chalk.gray('     bun run wspp 3 --camera --timer 5         → cámara con 5s delay'));
     console.log(chalk.gray('     bun run wspp 3 "Msg" --at 08:00          → programado'));
     console.log(chalk.gray('     bun run wspp:contacts                     → ver contactos'));
     console.log(chalk.gray('     bun run wspp:i                            → modo interactivo\n'));
@@ -220,10 +209,8 @@ async function wsppCli() {
       console.log(chalk.cyan("  📱 Para:"), firstArg);
     }
     if (message) console.log(chalk.cyan("  💬 Mensaje:"), message);
-    if (imagePath) console.log(chalk.cyan("  🖼️  Imagen:"), imagePath);
-    if (docPath) console.log(chalk.cyan("  📎 Documento:"), docPath);
     if (pollQuestion) console.log(chalk.cyan("  📊 Encuesta:"), pollQuestion, chalk.gray(`(${pollOptions.join(", ")})`));
-    if (useCamera) console.log(chalk.cyan("  📸 Cámara:"), "captura en vivo");
+    if (useCamera) console.log(chalk.cyan("  📸 Cámara:"), `captura en vivo (${cameraTimer}s timer)`);
     if (scheduleTime) {
       console.log(chalk.cyan("  ⏰ Programado:"), scheduleTime);
     }
@@ -357,18 +344,12 @@ async function wsppCli() {
 
       // Step 2: Send media if applicable
       if (hasMedia) {
-        if (imagePath) {
-          spinner.text = "Enviando imagen...";
-          await sendImage(page, imagePath, message || undefined);
-        } else if (docPath) {
-          spinner.text = "Enviando documento...";
-          await sendDocument(page, docPath, message || undefined);
-        } else if (pollQuestion) {
+        if (pollQuestion) {
           spinner.text = "Creando encuesta...";
           await sendPoll(page, pollQuestion, pollOptions);
         } else if (useCamera) {
           spinner.text = "Abriendo cámara...";
-          await sendCameraPhoto(page, message || undefined);
+          await sendCameraPhoto(page, cameraTimer, message || undefined);
         }
       }
 
