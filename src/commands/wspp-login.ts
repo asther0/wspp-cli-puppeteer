@@ -1,12 +1,13 @@
 import chalk from "chalk";
 import ora from "ora";
 import { launchBrowser, closeBrowser, hasSession } from "../utils/browser";
+import { showBanner } from "../ui/banner";
 import type { Page } from "puppeteer-core";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function wsppLogin() {
-  console.log(chalk.bold.green("\n🔑 WSPP-CLI - LOGIN\n"));
+  showBanner();
 
   if (hasSession()) {
     console.log(chalk.yellow("  Ya existe una sesión guardada."));
@@ -55,10 +56,10 @@ async function wsppLogin() {
     }
 
     console.log(chalk.bold.green("\n✅ LISTO\n"));
-    console.log(chalk.cyan("  Ahora puedes usar estos comandos (sin navegador visible):"));
-    console.log(chalk.gray('   bun run wspp "Contacto" "Mensaje"    → Enviar mensaje'));
-    console.log(chalk.gray('   bun run wspp:contacts                → Ver chats recientes'));
-    console.log(chalk.gray('   bun run wspp:contacts "nombre"       → Buscar contacto\n'));
+    console.log(chalk.cyan("  Ahora puedes usar:"));
+    console.log(chalk.gray('   bun run wspp "Contacto" "Mensaje"  → Enviar mensaje'));
+    console.log(chalk.gray('   bun run wspp:contacts              → Ver contactos'));
+    console.log(chalk.gray('   bun run wspp:i                     → Modo interactivo\n'));
 
     await delay(3000);
 

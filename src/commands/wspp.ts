@@ -2,6 +2,7 @@ import chalk from "chalk";
 import ora from "ora";
 import { launchBrowser, closeBrowser, hasSession } from "../utils/browser";
 import { extractContacts } from "../utils/contacts";
+import { showBanner, showSuccess } from "../ui/banner";
 import type { Page } from "puppeteer-core";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -36,16 +37,18 @@ async function wsppCli() {
   const isPositional = firstArg && /^\d+$/.test(firstArg);
 
   if (!firstArg || !message) {
-    console.log(chalk.red("\n❌ Faltan parámetros"));
-    console.log(chalk.yellow('\n📝 Uso:'));
-    console.log(chalk.gray('   bun run wspp "Contacto" "Mensaje"  → por nombre'));
-    console.log(chalk.gray('   bun run wspp 3 "Mensaje"           → por posición (#)\n'));
-    console.log(chalk.gray('   bun run wspp:contacts              → ver lista de contactos\n'));
+    showBanner();
+    console.log(chalk.red("  ❌ Faltan parámetros\n"));
+    console.log(chalk.yellow("  📝 Uso:"));
+    console.log(chalk.gray('     bun run wspp "Contacto" "Mensaje"  → por nombre'));
+    console.log(chalk.gray('     bun run wspp 3 "Mensaje"           → por posición (#)'));
+    console.log(chalk.gray('     bun run wspp 1,3,5 "Mensaje"       → envío masivo'));
+    console.log(chalk.gray('     bun run wspp:contacts              → ver contactos'));
+    console.log(chalk.gray('     bun run wspp:i                     → modo interactivo\n'));
     process.exit(1);
   }
 
-  console.log(chalk.bold.green("\n🚀 WSPP-CLI"));
-  console.log(chalk.bold.cyan("═══════════════════════════════════════\n"));
+  showBanner();
 
   if (isPositional) {
     console.log(chalk.cyan("  📱 Para:"), `contacto #${firstArg}`);
@@ -192,11 +195,11 @@ async function wsppCli() {
 
     spinner.succeed(chalk.bold.green("✓ MENSAJE ENVIADO"));
 
-    console.log(chalk.green("\n✅ ÉXITO\n"));
-    console.log(chalk.cyan("  📤 Para:"), contactName);
-    console.log(chalk.cyan("  💬 Mensaje:"), `"${message}"`);
-    console.log(chalk.cyan("  🕐 Hora:"), new Date().toLocaleTimeString("es-ES"));
-    console.log(chalk.gray("\n  Cerrando en 5s...\n"));
+    showSuccess("MENSAJE ENVIADO", {
+      "📤 Para": contactName,
+      "💬 Mensaje": `"${message}"`,
+      "🕐 Hora": new Date().toLocaleTimeString("es-ES"),
+    });
 
     await delay(5000);
 

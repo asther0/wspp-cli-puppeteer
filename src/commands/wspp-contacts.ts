@@ -2,6 +2,7 @@ import chalk from "chalk";
 import ora from "ora";
 import { launchBrowser, closeBrowser, hasSession } from "../utils/browser";
 import { extractContacts } from "../utils/contacts";
+import { showBanner } from "../ui/banner";
 import type { Page } from "puppeteer-core";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -17,14 +18,13 @@ async function isLoggedIn(page: Page): Promise<boolean> {
 async function wsppContacts() {
   const keyword = process.argv[2] || "";
 
-  console.log(chalk.bold.green("\n🔍 WSPP-CLI - BUSCAR CONTACTOS\n"));
+  showBanner();
 
   if (keyword) {
-    console.log(chalk.cyan("  Buscando:"), `"${keyword}"`);
+    console.log(chalk.cyan("  🔍 Buscando:"), `"${keyword}"\n`);
   } else {
-    console.log(chalk.cyan("  Mostrando:"), "chats recientes");
+    console.log(chalk.cyan("  📋 Mostrando:"), "chats recientes\n");
   }
-  console.log();
 
   if (!hasSession()) {
     console.log(chalk.yellow("⚠️  No hay sesión guardada. Ejecuta primero:"));
