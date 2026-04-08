@@ -2,7 +2,9 @@ import chalk from "chalk";
 import ora from "ora";
 import type { Page } from "puppeteer-core";
 import type { Contact } from "./contacts";
+import type { CsvRow } from "./csv-parser";
 import { sendMessage, sendMessageByPhone } from "./sender";
+import { renderTemplate } from "./template-engine";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -54,8 +56,56 @@ export async function sendBulkMessages(
         await delay(3000);
       }
     } catch (err: any) {
-      spinner.fail(chalk.red(`  ✖ Error con ${contactName}: ${err.message}`));
-      result.failed.push(contactName);
+      spinner.fail(chalk.red(`  ✖ Error con ${label}: ${err.message}`));
+      result.failed.push(label);
+    }
+  }
+
+  return result;
+}
+
+export async function sendCsvMessages(
+  page: Page,
+  rows: CsvRow[],
+  defaultMessage: string,
+): Promise<BulkResult> {
+  const result: BulkResult = { success: 0, failed: [] };
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const label = row.name || row.phone || `Fila ${i + 2}`;
+
+    // Render message: row-level message overrides default, then apply template vars
+    const rawMessage = row.message || defaultMessage;
+    const vars: Record<string, string> = {};
+    for (const [k, v] of Object.entries(row)) {
+      if (v) vars[k] = v;
+    }
+    const message = renderTemplate(rawMessage, vars);
+
+    if (!message.trim()) {
+      console.log(chalk.yellow(`  ⚠ ${label}: sin mensaje, saltando`));
+      result.failed.push(label);
+      continue;
+    }
+
+    const spinner = ora(`  [${i + 1}/${rows.length}] Enviando a ${label}...`).start();
+
+    try {
+      if (row.phone) {
+        await sendMessageByPhone(page, row.phone, message);
+      } else if (row.name) {
+        await sendMessage(page, row.name, message);
+      }
+      spinner.succeed(chalk.green(`  ✓ Enviado a ${label}`));
+      result.success++;
+
+      if (i < rows.length - 1) {
+        await delay(3000);
+      }
+    } catch (err: any) {
+      spinner.fail(chalk.red(`  ✖ Error con ${label}: ${err.message}`));
+      result.failed.push(label);
     }
   }
 

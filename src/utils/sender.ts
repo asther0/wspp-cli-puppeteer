@@ -112,7 +112,19 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
 
   await messageBox.click();
   await delay(500);
-  await page.keyboard.type(message, { delay: 50 });
+
+  // Handle multi-line messages: Shift+Enter for line breaks (Enter alone sends the message)
+  const lines = message.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].length > 0) {
+      await page.keyboard.type(lines[i], { delay: 50 });
+    }
+    if (i < lines.length - 1) {
+      await page.keyboard.down('Shift');
+      await page.keyboard.press('Enter');
+      await page.keyboard.up('Shift');
+    }
+  }
   await delay(1500);
 
   // Try clicking the send button (more reliable for community groups)
