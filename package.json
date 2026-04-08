@@ -20,10 +20,8 @@
   },
   "dependencies": {
     "@inquirer/prompts": "^8.4.1",
-    "@types/figlet": "^1.7.0",
     "chalk": "5",
     "cli-table3": "^0.6.5",
-    "figlet": "^1.11.0",
     "ora": "8",
     "puppeteer-core": "^24.40.0"
   }

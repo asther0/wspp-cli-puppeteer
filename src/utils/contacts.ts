@@ -5,25 +5,11 @@ export interface Contact {
   phone: string;
 }
 
-// Unicode directional/invisible chars WhatsApp wraps around message previews
-const INVISIBLE_RE = /[\u200e\u200f\u200b\u200c\u200d\u202a-\u202e\u2066-\u2069\uFEFF]/g;
-
-function hasInvisibleWrapper(text: string): boolean {
-  // Message previews in WhatsApp start/end with invisible Unicode chars
-  // Contact names do NOT have these wrappers
-  return INVISIBLE_RE.test(text);
-}
-
 function isLikelyNotContact(name: string): boolean {
-  const clean = name.replace(INVISIBLE_RE, '').trim();
+  // Strip invisible Unicode chars for analysis (no global flag to avoid lastIndex bug)
+  const clean = name.replace(/[\u200e\u200f\u200b\u200c\u200d\u202a-\u202e\u2066-\u2069\uFEFF]/g, '').trim();
 
-  // Empty after cleaning
   if (clean.length <= 1) return true;
-
-  // Wrapped in invisible chars = message preview, not a contact name
-  if (hasInvisibleWrapper(name)) return true;
-  // Reset regex lastIndex
-  INVISIBLE_RE.lastIndex = 0;
 
   // File attachments
   if (/\.(pdf|jpg|png|gif|mp4|mp3|doc|xls|zip|rar)/i.test(clean)) return true;
@@ -51,13 +37,10 @@ export async function extractContacts(page: Page, max = 10): Promise<Contact[]> 
     const chatRows = document.querySelectorAll('[role="listitem"]');
 
     chatRows.forEach((row) => {
-      // Get ALL span[title] in this row
       const allTitleSpans = row.querySelectorAll('span[title]');
-
-      // The FIRST span[title] is the contact/group name
-      // Subsequent ones are message previews, file names, etc.
       if (allTitleSpans.length === 0) return;
 
+      // First span[title] = contact name, rest = message previews
       const name = allTitleSpans[0].getAttribute('title') || '';
       if (!name || seen.has(name) || name.length > 60 || name.startsWith('http')) return;
       seen.add(name);
