@@ -252,35 +252,76 @@ export async function sendPoll(page: Page, question: string, options: string[]):
 
   await delay(500);
 
-  // Click send — the poll modal button may differ from the regular send icon
+  // Debug: capture poll modal state before clicking send
+  const pollDebug = await page.evaluate(() => {
+    const btns = document.querySelectorAll('button, [role="button"]');
+    const info: string[] = [];
+    btns.forEach((btn) => {
+      const label = btn.getAttribute("aria-label") || "";
+      const title = btn.getAttribute("title") || "";
+      const icon = btn.querySelector("span[data-icon]")?.getAttribute("data-icon") || "";
+      const text = (btn as HTMLElement).innerText?.trim().substring(0, 40) || "";
+      if (label || icon || text) {
+        info.push(`[${icon || "-"}] aria="${label}" title="${title}" text="${text}"`);
+      }
+    });
+    return info;
+  });
+  console.log("\n  [debug-poll] Botones visibles:");
+  pollDebug.forEach((b) => console.log(`    ${b}`));
+
+  // Click send — search broadly for the poll submit button
   const sent = await page.evaluate(() => {
-    // 1. Try the regular send icon
+    // 1. Try send icon inside a dialog/overlay/popup (poll modal context)
+    const containers = document.querySelectorAll('[role="dialog"], [data-animate-modal-popup="true"], .overlay, ._3J6wB');
+    for (const container of containers) {
+      const sendIcon = container.querySelector('span[data-icon="send"]');
+      if (sendIcon) {
+        const btn = sendIcon.closest("button") || sendIcon.parentElement;
+        if (btn) { (btn as HTMLElement).click(); return "dialog-send-icon"; }
+      }
+    }
+
+    // 2. Try any send icon on the page
     const sendIcon = document.querySelector('span[data-icon="send"]');
     if (sendIcon) {
       const btn = sendIcon.closest("button") || sendIcon.parentElement;
       if (btn) { (btn as HTMLElement).click(); return "send-icon"; }
     }
 
-    // 2. Try submit button by aria-label
+    // 3. Try submit button by aria-label (broad: "send", "enviar", "crear", "create")
     const allBtns = document.querySelectorAll('button, [role="button"]');
     for (const btn of allBtns) {
       const label = (btn.getAttribute("aria-label") || btn.getAttribute("title") || "").toLowerCase();
-      if (label.includes("enviar encuesta") || label.includes("send poll") || label.includes("crear") || label.includes("create")) {
+      if (label === "send" || label === "enviar" || label.includes("enviar encuesta") || label.includes("send poll") || label.includes("crear encuesta") || label.includes("create poll")) {
         (btn as HTMLElement).click();
-        return "aria-label";
+        return `aria: ${label}`;
       }
     }
 
-    // 3. Try the last/bottom button inside a dialog or overlay (usually the submit)
-    const dialog = document.querySelector('[role="dialog"]') || document.querySelector('.overlay');
-    if (dialog) {
-      const btns = dialog.querySelectorAll('button, [role="button"]');
+    // 4. Try button with text "Send" or "Enviar" inside a dialog
+    for (const container of containers) {
+      const btns = container.querySelectorAll('button, [role="button"]');
+      for (const btn of btns) {
+        const text = (btn as HTMLElement).innerText?.trim().toLowerCase() || "";
+        if (text === "send" || text === "enviar" || text.includes("send poll") || text.includes("enviar encuesta")) {
+          (btn as HTMLElement).click();
+          return `text: ${text}`;
+        }
+      }
+    }
+
+    // 5. Last resort: bottom-most button inside a dialog
+    for (const container of containers) {
+      const btns = container.querySelectorAll('button, [role="button"]');
       const lastBtn = btns[btns.length - 1];
       if (lastBtn) { (lastBtn as HTMLElement).click(); return "last-btn"; }
     }
 
     return null;
   });
+
+  console.log(`  [debug-poll] Resultado envío: ${sent || "null (fallback Enter)"}`);
 
   if (!sent) {
     await page.keyboard.press("Enter");
