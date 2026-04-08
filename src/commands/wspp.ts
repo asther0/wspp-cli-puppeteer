@@ -3,6 +3,7 @@ import ora from "ora";
 import { launchBrowser, closeBrowser, hasSession } from "../utils/browser";
 import { extractContacts } from "../utils/contacts";
 import { sendMessage } from "../utils/sender";
+import { sendBulkMessages } from "../utils/bulk-sender";
 import { showBanner, showSuccess } from "../ui/banner";
 import type { Page } from "puppeteer-core";
 
@@ -32,31 +33,57 @@ async function waitForLogin(page: Page, spinner: ReturnType<typeof ora>): Promis
   throw new Error("Timeout esperando login.");
 }
 
+function parseArgs() {
+  const args = process.argv.slice(2);
+
+  // Extract --at flag
+  let scheduleTime: string | null = null;
+  const atIdx = args.indexOf("--at");
+  if (atIdx !== -1 && args[atIdx + 1]) {
+    scheduleTime = args[atIdx + 1];
+    args.splice(atIdx, 2);
+  }
+
+  const firstArg = args[0] || "";
+  const message = args.slice(1).join(" ");
+
+  // Detect bulk (comma-separated)
+  const isBulk = firstArg.includes(",");
+  const targets = isBulk ? firstArg.split(",").map(t => t.trim()) : [];
+  const isPositional = !isBulk && /^\d+$/.test(firstArg);
+
+  return { firstArg, message, isBulk, targets, isPositional, scheduleTime };
+}
+
 async function wsppCli() {
-  const firstArg = process.argv[2];
-  const message = process.argv.slice(3).join(" ");
-  const isPositional = firstArg && /^\d+$/.test(firstArg);
+  const { firstArg, message, isBulk, targets, isPositional, scheduleTime } = parseArgs();
 
   if (!firstArg || !message) {
     showBanner();
     console.log(chalk.red("  ❌ Faltan parámetros\n"));
     console.log(chalk.yellow("  📝 Uso:"));
-    console.log(chalk.gray('     bun run wspp "Contacto" "Mensaje"  → por nombre'));
-    console.log(chalk.gray('     bun run wspp 3 "Mensaje"           → por posición (#)'));
-    console.log(chalk.gray('     bun run wspp 1,3,5 "Mensaje"       → envío masivo'));
-    console.log(chalk.gray('     bun run wspp:contacts              → ver contactos'));
-    console.log(chalk.gray('     bun run wspp:i                     → modo interactivo\n'));
+    console.log(chalk.gray('     bun run wspp "Contacto" "Mensaje"      → por nombre'));
+    console.log(chalk.gray('     bun run wspp 3 "Mensaje"               → por posición (#)'));
+    console.log(chalk.gray('     bun run wspp 1,3,5 "Mensaje"           → envío masivo'));
+    console.log(chalk.gray('     bun run wspp 3 "Msg" --at 08:00       → programado'));
+    console.log(chalk.gray('     bun run wspp:contacts                  → ver contactos'));
+    console.log(chalk.gray('     bun run wspp:i                         → modo interactivo\n'));
     process.exit(1);
   }
 
   showBanner();
 
-  if (isPositional) {
+  if (isBulk) {
+    console.log(chalk.cyan("  📨 Envío masivo:"), `${targets.length} destinatarios`);
+  } else if (isPositional) {
     console.log(chalk.cyan("  📱 Para:"), `contacto #${firstArg}`);
   } else {
     console.log(chalk.cyan("  📱 Para:"), firstArg);
   }
   console.log(chalk.cyan("  💬 Mensaje:"), message);
+  if (scheduleTime) {
+    console.log(chalk.cyan("  ⏰ Programado:"), scheduleTime);
+  }
   console.log();
 
   const sessionExists = hasSession();
@@ -80,36 +107,62 @@ async function wsppCli() {
 
     await delay(3000);
 
-    // Resolve contact name
-    let contactName: string;
-
-    if (isPositional) {
-      const pos = parseInt(firstArg, 10);
-      spinner.start("Obteniendo lista de contactos...");
-      const contacts = await extractContacts(page);
-
-      if (pos < 1 || pos > contacts.length) {
-        throw new Error(`Posición #${pos} inválida. Solo hay ${contacts.length} contactos. Usa: bun run wspp:contacts`);
-      }
-
-      contactName = contacts[pos - 1].name;
-      spinner.succeed(chalk.green(`✓ Contacto #${pos}: ${contactName}`));
-    } else {
-      contactName = firstArg;
+    // Handle scheduled messages
+    if (scheduleTime) {
+      const { waitUntil, parseScheduleTime } = await import("../utils/scheduler");
+      const targetTime = parseScheduleTime(scheduleTime);
+      console.log(chalk.cyan("  ⏰ Enviará a las:"), targetTime.toLocaleString("es-ES"));
+      console.log();
+      await waitUntil(targetTime);
     }
 
-    // Send message using shared sender
-    spinner.start(`Enviando a "${contactName}"...`);
-    await sendMessage(page, contactName, message);
+    // Bulk mode
+    if (isBulk) {
+      spinner.start("Obteniendo contactos...");
+      const contacts = await extractContacts(page);
+      spinner.succeed(chalk.green(`✓ ${contacts.length} contactos cargados`));
 
-    await page.screenshot({ path: "wspp-sent.png" });
-    spinner.succeed(chalk.bold.green("✓ MENSAJE ENVIADO"));
+      console.log();
+      const result = await sendBulkMessages(page, targets, message, contacts);
 
-    showSuccess("MENSAJE ENVIADO", {
-      "📤 Para": contactName,
-      "💬 Mensaje": `"${message}"`,
-      "🕐 Hora": new Date().toLocaleTimeString("es-ES"),
-    });
+      console.log(chalk.cyan("\n  ─── Resumen ───"));
+      console.log(chalk.green(`  ✓ Enviados: ${result.success}`));
+      if (result.failed.length > 0) {
+        console.log(chalk.red(`  ✖ Fallidos: ${result.failed.length} (${result.failed.join(", ")})`));
+      }
+      console.log();
+
+    } else {
+      // Single mode
+      let contactName: string;
+
+      if (isPositional) {
+        const pos = parseInt(firstArg, 10);
+        spinner.start("Obteniendo lista de contactos...");
+        const contacts = await extractContacts(page);
+
+        if (pos < 1 || pos > contacts.length) {
+          throw new Error(`Posición #${pos} inválida. Solo hay ${contacts.length} contactos. Usa: bun run wspp:contacts`);
+        }
+
+        contactName = contacts[pos - 1].name;
+        spinner.succeed(chalk.green(`✓ Contacto #${pos}: ${contactName}`));
+      } else {
+        contactName = firstArg;
+      }
+
+      spinner.start(`Enviando a "${contactName}"...`);
+      await sendMessage(page, contactName, message);
+
+      await page.screenshot({ path: "wspp-sent.png" });
+      spinner.succeed(chalk.bold.green("✓ MENSAJE ENVIADO"));
+
+      showSuccess("MENSAJE ENVIADO", {
+        "📤 Para": contactName,
+        "💬 Mensaje": `"${message}"`,
+        "🕐 Hora": new Date().toLocaleTimeString("es-ES"),
+      });
+    }
 
     await delay(3000);
 
