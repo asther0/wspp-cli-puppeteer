@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import ora from "ora";
 import { launchBrowser, closeBrowser, hasSession } from "../utils/browser";
+import { extractContacts } from "../utils/contacts";
 import type { Page } from "puppeteer-core";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -30,18 +31,27 @@ async function waitForLogin(page: Page, spinner: ReturnType<typeof ora>): Promis
 }
 
 async function wsppCli() {
-  const contactName = process.argv[2];
+  const firstArg = process.argv[2];
   const message = process.argv.slice(3).join(" ");
+  const isPositional = firstArg && /^\d+$/.test(firstArg);
 
-  if (!contactName || !message) {
+  if (!firstArg || !message) {
     console.log(chalk.red("\n❌ Faltan parámetros"));
-    console.log(chalk.yellow('\n📝 Uso: bun run wspp "Contacto" "Mensaje"\n'));
+    console.log(chalk.yellow('\n📝 Uso:'));
+    console.log(chalk.gray('   bun run wspp "Contacto" "Mensaje"  → por nombre'));
+    console.log(chalk.gray('   bun run wspp 3 "Mensaje"           → por posición (#)\n'));
+    console.log(chalk.gray('   bun run wspp:contacts              → ver lista de contactos\n'));
     process.exit(1);
   }
 
   console.log(chalk.bold.green("\n🚀 WSPP-CLI"));
   console.log(chalk.bold.cyan("═══════════════════════════════════════\n"));
-  console.log(chalk.cyan("  📱 Para:"), contactName);
+
+  if (isPositional) {
+    console.log(chalk.cyan("  📱 Para:"), `contacto #${firstArg}`);
+  } else {
+    console.log(chalk.cyan("  📱 Para:"), firstArg);
+  }
   console.log(chalk.cyan("  💬 Mensaje:"), message);
   console.log();
 
@@ -66,17 +76,33 @@ async function wsppCli() {
 
     await delay(3000);
 
+    // Resolve contact name
+    let contactName: string;
+
+    if (isPositional) {
+      const pos = parseInt(firstArg, 10);
+      spinner.start("Obteniendo lista de contactos...");
+      const contacts = await extractContacts(page);
+
+      if (pos < 1 || pos > contacts.length) {
+        throw new Error(`Posición #${pos} inválida. Solo hay ${contacts.length} contactos. Usa: bun run wspp:contacts`);
+      }
+
+      contactName = contacts[pos - 1];
+      spinner.succeed(chalk.green(`✓ Contacto #${pos}: ${contactName}`));
+    } else {
+      contactName = firstArg;
+    }
+
     // ===== PASO 1: Click en búsqueda y escribir contacto =====
     spinner.start(`Buscando "${contactName}"...`);
 
-    // Click en la barra de búsqueda (es un <input> dentro de #side)
     const searchInput = await page.$('#side input');
     if (!searchInput) throw new Error("No se encontró la barra de búsqueda");
 
     await searchInput.click();
     await delay(500);
 
-    // Limpiar y escribir
     await page.keyboard.down("Control");
     await page.keyboard.press("A");
     await page.keyboard.up("Control");
@@ -84,24 +110,20 @@ async function wsppCli() {
     await delay(300);
 
     await page.keyboard.type(contactName, { delay: 100 });
-    await delay(3000); // Esperar resultados de búsqueda
+    await delay(3000);
 
-    // ===== PASO 2: Seleccionar contacto con click nativo =====
+    // ===== PASO 2: Seleccionar contacto =====
     spinner.text = "Seleccionando contacto...";
 
-    // Esperar a que aparezcan resultados y hacer click con Puppeteer nativo
     let chatOpened = false;
 
-    // Buscar el resultado que coincida con el nombre
     const listItems = await page.$$('[role="listitem"]');
-
     if (listItems.length > 0) {
       await listItems[0].click();
       chatOpened = true;
     }
 
     if (!chatOpened) {
-      // Intentar con data-testid
       const cellFrames = await page.$$('[data-testid^="cell-frame"]');
       if (cellFrames.length > 0) {
         await cellFrames[0].click();
@@ -110,7 +132,6 @@ async function wsppCli() {
     }
 
     if (!chatOpened) {
-      // Intentar con span[title] que contenga el nombre
       const spans = await page.$$('span[title]');
       for (const span of spans) {
         const title = await span.evaluate((el: Element) => el.getAttribute('title'));
@@ -123,7 +144,6 @@ async function wsppCli() {
     }
 
     if (!chatOpened) {
-      // Último recurso: Tab + Enter para navegar al resultado
       await page.keyboard.press("ArrowDown");
       await delay(300);
       await page.keyboard.press("Enter");
@@ -131,10 +151,9 @@ async function wsppCli() {
 
     await delay(3000);
 
-    // ===== PASO 3: Verificar que el chat se abrió =====
+    // ===== PASO 3: Verificar chat abierto =====
     spinner.text = "Verificando chat abierto...";
 
-    // Buscar el cuadro de mensaje en footer o main (NO en #side)
     const footer = await page.$('footer');
     const main = await page.$('main');
 
@@ -142,10 +161,9 @@ async function wsppCli() {
       throw new Error(`No se abrió el chat de "${contactName}". Verifica que el nombre sea exacto.`);
     }
 
-    // ===== PASO 4: Escribir mensaje en el cuadro de mensaje =====
+    // ===== PASO 4: Escribir mensaje =====
     spinner.text = "Escribiendo mensaje...";
 
-    // Buscar el campo de mensaje SOLO en footer o main (no en #side)
     let messageBox = null;
 
     if (footer) {
@@ -170,7 +188,6 @@ async function wsppCli() {
     await page.keyboard.press("Enter");
     await delay(3000);
 
-    // Screenshot de verificación
     await page.screenshot({ path: "wspp-sent.png" });
 
     spinner.succeed(chalk.bold.green("✓ MENSAJE ENVIADO"));
@@ -187,7 +204,6 @@ async function wsppCli() {
     spinner.fail(chalk.red("✖ Error"));
     console.error(chalk.yellow("\n⚠️"), error.message);
 
-    // Screenshot de error para diagnóstico
     try {
       const pages = await browser.pages();
       await pages[0].screenshot({ path: "wspp-error.png" });
