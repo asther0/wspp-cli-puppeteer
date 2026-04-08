@@ -5,48 +5,40 @@ export interface Contact {
   phone: string;
 }
 
-// Unicode control chars WhatsApp injects
+// Unicode directional/invisible chars WhatsApp wraps around message previews
 const INVISIBLE_RE = /[\u200e\u200f\u200b\u200c\u200d\u202a-\u202e\u2066-\u2069\uFEFF]/g;
 
-function cleanText(text: string): string {
-  return text.replace(INVISIBLE_RE, '').trim();
+function hasInvisibleWrapper(text: string): boolean {
+  // Message previews in WhatsApp start/end with invisible Unicode chars
+  // Contact names do NOT have these wrappers
+  return INVISIBLE_RE.test(text);
 }
 
-// Known noise patterns (messages, UI text, system msgs)
-const NOISE = [
-  "you", "aún no", "hola desde", "http", "buscar", "search",
-  "chats", "loading", "waiting for", "this may take",
-  "no hay mensajes", "messages and calls", "end-to-end",
-  "lo reviso", "reviso", "listo", "ok", "dale", "ya",
-  "gracias", "sí", "si", "no", "bueno",
-];
+function isLikelyNotContact(name: string): boolean {
+  const clean = name.replace(INVISIBLE_RE, '').trim();
 
-function isLikelyMessage(name: string): boolean {
-  const clean = cleanText(name);
-  const lower = clean.toLowerCase();
+  // Empty after cleaning
+  if (clean.length <= 1) return true;
 
-  // Timestamps: 1:49, 12:30, 7:00 PM, etc.
+  // Wrapped in invisible chars = message preview, not a contact name
+  if (hasInvisibleWrapper(name)) return true;
+  // Reset regex lastIndex
+  INVISIBLE_RE.lastIndex = 0;
+
+  // File attachments
+  if (/\.(pdf|jpg|png|gif|mp4|mp3|doc|xls|zip|rar)/i.test(clean)) return true;
+
+  // Timestamps
   if (/^\d{1,2}:\d{2}/.test(clean)) return true;
-  if (/^(AM|PM)$/i.test(clean)) return true;
 
-  // Only emojis/symbols
+  // Draft indicator
+  if (/^borrador/i.test(clean) || /^draft/i.test(clean)) return true;
+
+  // Only emojis
   if (/^[\p{Emoji}\p{Emoji_Component}\s]+$/u.test(clean)) return true;
 
-  // Very short lowercase text (likely a message snippet)
-  if (clean.length <= 15 && /^[a-záéíóúñü]/.test(clean) && !/\s/.test(clean)) {
-    // Single lowercase word under 15 chars = likely a message
-    // Exception: proper names could be lowercase in Spanish contacts
-    if (NOISE.includes(lower)) return true;
-  }
-
-  // Noise patterns
-  if (NOISE.some(n => lower.includes(n) && lower.length < 30)) return true;
-
-  // Sentences (lowercase start + multiple words + long)
-  if (/^[a-záéíóúñü]/.test(clean) && (clean.match(/\s/g) || []).length >= 2 && clean.length > 20) return true;
-
-  // Almost empty after cleaning invisible chars
-  if (clean.length <= 1) return true;
+  // UI elements
+  if (/^(buscar|search|chats|loading)/i.test(clean)) return true;
 
   return false;
 }
@@ -56,15 +48,17 @@ export async function extractContacts(page: Page, max = 10): Promise<Contact[]> 
     const results: Array<{ name: string; phone: string }> = [];
     const seen = new Set<string>();
 
-    const chatRows = document.querySelectorAll('[role="listitem"], [data-testid^="cell-frame-container"]');
+    const chatRows = document.querySelectorAll('[role="listitem"]');
 
     chatRows.forEach((row) => {
-      // Target the FIRST span[title] — that's the contact name in WhatsApp
-      const nameSpan = row.querySelector('span[title]')
-        || row.querySelector('[data-testid^="cell-frame-title"] span');
+      // Get ALL span[title] in this row
+      const allTitleSpans = row.querySelectorAll('span[title]');
 
-      const name = nameSpan?.getAttribute('title') || '';
+      // The FIRST span[title] is the contact/group name
+      // Subsequent ones are message previews, file names, etc.
+      if (allTitleSpans.length === 0) return;
 
+      const name = allTitleSpans[0].getAttribute('title') || '';
       if (!name || seen.has(name) || name.length > 60 || name.startsWith('http')) return;
       seen.add(name);
 
@@ -86,27 +80,10 @@ export async function extractContacts(page: Page, max = 10): Promise<Contact[]> 
       results.push({ name, phone });
     });
 
-    // Fallback: scan all span[title] in #side (not span[dir="auto"] which catches messages)
-    if (results.length === 0) {
-      const side = document.querySelector('#side');
-      if (side) {
-        const allSpans = side.querySelectorAll('span[title]');
-        allSpans.forEach((span) => {
-          const text = span.getAttribute('title') || '';
-          if (text && !seen.has(text) && text.length > 1 && text.length < 50
-              && !text.startsWith('http')) {
-            seen.add(text);
-            const isPhone = /^\+?\d[\d\s\-()]{6,}$/.test(text);
-            results.push({ name: text, phone: isPhone ? text.replace(/[\s\-()]/g, '') : '' });
-          }
-        });
-      }
-    }
-
     return results.slice(0, 30);
   });
 
   return raw
-    .filter(({ name }) => !isLikelyMessage(name))
+    .filter(({ name }) => !isLikelyNotContact(name))
     .slice(0, max);
 }
