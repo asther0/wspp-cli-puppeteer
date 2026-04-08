@@ -81,39 +81,62 @@ async function wsppContacts() {
       }
     } else {
       const nameW = Math.max(...filtered.map(c => c.name.length), 20) + 2;
-      const phoneW = 18;
       const numW = 4;
+      const hasAnyPhone = filtered.some(c => c.phone);
+      const phoneW = hasAnyPhone ? 18 : 0;
 
-      const line = (l: string, c1: string, c2: string, r: string, fill: string) =>
-        l + fill.repeat(numW + 2) + c1 + fill.repeat(nameW + 2) + c2 + fill.repeat(phoneW + 2) + r;
+      if (hasAnyPhone) {
+        const line = (l: string, c1: string, c2: string, r: string, fill: string) =>
+          l + fill.repeat(numW + 2) + c1 + fill.repeat(nameW + 2) + c2 + fill.repeat(phoneW + 2) + r;
 
-      console.log(chalk.cyan("\n" + line("╔", "╦", "╦", "╗", "═")));
-      console.log(
-        chalk.cyan("║") + chalk.bold.white(" #".padEnd(numW + 2)) +
-        chalk.cyan("║") + chalk.bold.white(" Contacto".padEnd(nameW + 2)) +
-        chalk.cyan("║") + chalk.bold.white(" Teléfono".padEnd(phoneW + 2)) +
-        chalk.cyan("║")
-      );
-      console.log(chalk.cyan(line("╠", "╬", "╬", "╣", "═")));
-
-      filtered.forEach((c, i) => {
-        const num = ` ${String(i + 1).padEnd(numW + 1)}`;
-        const name = ` ${c.name.padEnd(nameW + 1)}`;
-        const phone = ` ${(c.phone || "—").padEnd(phoneW + 1)}`;
+        console.log(chalk.cyan("\n" + line("╔", "╦", "╦", "╗", "═")));
         console.log(
-          chalk.cyan("║") + chalk.white(num) +
-          chalk.cyan("║") + chalk.green(name) +
-          chalk.cyan("║") + chalk.gray(phone) +
+          chalk.cyan("║") + chalk.bold.white(" #".padEnd(numW + 2)) +
+          chalk.cyan("║") + chalk.bold.white(" Contacto".padEnd(nameW + 2)) +
+          chalk.cyan("║") + chalk.bold.white(" Teléfono".padEnd(phoneW + 2)) +
           chalk.cyan("║")
         );
-      });
+        console.log(chalk.cyan(line("╠", "╬", "╬", "╣", "═")));
 
-      console.log(chalk.cyan(line("╚", "╩", "╩", "╝", "═")));
+        filtered.forEach((c, i) => {
+          const num = ` ${String(i + 1).padEnd(numW + 1)}`;
+          const name = ` ${c.name.padEnd(nameW + 1)}`;
+          const phone = ` ${(c.phone || "—").padEnd(phoneW + 1)}`;
+          console.log(
+            chalk.cyan("║") + chalk.white(num) +
+            chalk.cyan("║") + chalk.green(name) +
+            chalk.cyan("║") + chalk.gray(phone) +
+            chalk.cyan("║")
+          );
+        });
 
-      console.log(chalk.bold.yellow("\n💡 Para enviar mensaje:"));
-      console.log(chalk.gray('   bun run wspp 3 "mensaje"              → por posición'));
-      console.log(chalk.gray('   bun run wspp "Lywinecito" "mensaje"   → por nombre'));
-      console.log(chalk.gray('   bun run wspp "+51999..." "mensaje"    → por teléfono\n'));
+        console.log(chalk.cyan(line("╚", "╩", "╩", "╝", "═")));
+      } else {
+        const line = (l: string, m: string, r: string, fill: string) =>
+          l + fill.repeat(numW + 2) + m + fill.repeat(nameW + 2) + r;
+
+        console.log(chalk.cyan("\n" + line("╔", "╦", "╗", "═")));
+        console.log(
+          chalk.cyan("║") + chalk.bold.white(" #".padEnd(numW + 2)) +
+          chalk.cyan("║") + chalk.bold.white(" Contacto".padEnd(nameW + 2)) +
+          chalk.cyan("║")
+        );
+        console.log(chalk.cyan(line("╠", "╬", "╣", "═")));
+
+        filtered.forEach((c, i) => {
+          const num = ` ${String(i + 1).padEnd(numW + 1)}`;
+          const name = ` ${c.name.padEnd(nameW + 1)}`;
+          console.log(
+            chalk.cyan("║") + chalk.white(num) +
+            chalk.cyan("║") + chalk.green(name) +
+            chalk.cyan("║")
+          );
+        });
+
+        console.log(chalk.cyan(line("╚", "╩", "╝", "═")));
+      }
+
+      console.log(chalk.dim('\n  Uso: bun run wspp 3 "mensaje" · bun run wspp "nombre" "mensaje"\n'));
     }
 
   } catch (error: any) {

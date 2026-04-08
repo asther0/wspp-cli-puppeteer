@@ -58,8 +58,11 @@ export async function extractContacts(page: Page, max = 10): Promise<Contact[]> 
       }
 
       // If name IS a phone number, use it
-      if (!phone && /^\+?\d[\d\s\-()]{6,}$/.test(name)) {
-        phone = name.replace(/[\s\-()]/g, '');
+      if (!phone) {
+        const digits = name.replace(/[^\d]/g, '');
+        if (digits.length >= 7) {
+          phone = '+' + digits;
+        }
       }
 
       results.push({ name, phone, source: 'listitem' });
