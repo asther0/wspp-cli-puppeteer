@@ -182,13 +182,62 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
 }
 
 export async function selectContactByPosition(page: Page, position: number): Promise<void> {
-  // Click the listitem directly from sidebar — no search needed
-  const listItems = await page.$$('#side [role="listitem"]');
-  if (position < 1 || position > listItems.length) {
-    throw new Error(`Posición #${position} inválida. Solo hay ${listItems.length} chats visibles.`);
+  // Mirror extractContacts filtering to ensure position alignment
+  const result = await page.evaluate((pos: number) => {
+    const items = document.querySelectorAll('[role="listitem"]');
+    const validItems: { name: string; el: Element }[] = [];
+    const seen = new Set<string>();
+
+    items.forEach((row) => {
+      let name = '';
+      const titleContainer = row.querySelector('[data-testid="cell-frame-title"]');
+      if (titleContainer) {
+        const titleSpan = titleContainer.querySelector('span[title]');
+        if (titleSpan) name = titleSpan.getAttribute('title') || '';
+      }
+      if (!name) {
+        const span = row.querySelector('span[title]');
+        if (span) name = span.getAttribute('title') || '';
+      }
+
+      if (!name || seen.has(name) || name.length > 60 || name.startsWith('http')) return;
+
+      // Junk filter (same as isJunk in contacts.ts)
+      if (/[\u200b\u200c\u200d\u202a-\u202e\u2066-\u2069\uFEFF]/.test(name)) return;
+      const clean = name.replace(/[\u200e\u200f]/g, '').trim();
+      if (clean.length <= 1) return;
+      if (/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u.test(clean)) return;
+      if (/\.(pdf|jpg|png|gif|mp4|mp3|doc|xls|zip|rar)/i.test(clean)) return;
+      if (/^\d{1,2}:\d{2}/.test(clean)) return;
+      if (/^borrador/i.test(clean) || /^draft/i.test(clean)) return;
+      if (/^(buscar|search|chats|loading)/i.test(clean)) return;
+      if (/https?:\/\//.test(clean)) return;
+
+      seen.add(name);
+      validItems.push({ name, el: row });
+    });
+
+    // Remove community headers: "X" followed by "X Something" → drop "X"
+    const deduped = validItems.filter((c, i) => {
+      const next = validItems[i + 1];
+      if (next && next.name.startsWith(c.name) && next.name.length > c.name.length) {
+        return false;
+      }
+      return true;
+    });
+
+    if (pos < 1 || pos > deduped.length) {
+      return { clicked: false, total: deduped.length };
+    }
+
+    (deduped[pos - 1].el as HTMLElement).click();
+    return { clicked: true, total: deduped.length };
+  }, position);
+
+  if (!result.clicked) {
+    throw new Error(`Posición #${position} inválida. Solo hay ${result.total} chats visibles.`);
   }
 
-  await listItems[position - 1].click();
   await delay(3000);
 
   // Verify message box exists
