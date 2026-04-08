@@ -11,6 +11,8 @@ Built with Puppeteer + Bun. No APIs, no tokens — just browser automation.
 - Interactive mode with arrow-key navigation
 - Bulk messaging to multiple contacts at once
 - CSV bulk send with `{{template}}` variables
+- Polls / surveys in group chats
+- Camera capture with countdown timer
 - Scheduled messages with real-time countdown
 - Anti-ban: random delays (3–7s) + volume warnings
 - Persistent session — scan QR once, reuse forever
@@ -118,7 +120,41 @@ bun run wspp "Team Lead" "Daily standup reminder" --at 09:00
 
 Shows a real-time countdown in the terminal until the message is sent.
 
-### 5. Browse and search contacts
+### 5. Send a poll (groups only)
+
+Create quick surveys in group chats.
+
+```bash
+# Basic poll
+bun run wspp "Team Group" --poll "Lunch spot?" "Pizza,Sushi,Tacos"
+
+# More options
+bun run wspp "Friends" --poll "Movie night?" "Friday,Saturday,Sunday,Skip"
+```
+
+Works in regular groups and community groups. Polls are not supported in individual chats.
+
+### 6. Take a photo with camera
+
+Capture and send a live photo directly from the CLI.
+
+```bash
+# Default 3-second countdown
+bun run wspp "Chema" --camera
+
+# Custom timer (5 seconds)
+bun run wspp "Chema" --camera --timer 5
+
+# With caption
+bun run wspp "Chema" --camera --timer 3 "Live from the office!"
+
+# Instant capture (no countdown)
+bun run wspp "Chema" --camera --timer 0
+```
+
+Shows a visual countdown both in the terminal and on the browser page. Camera always opens in visible mode (not background).
+
+### 7. Browse and search contacts
 
 ```bash
 # List your 10 most recent chats
@@ -140,7 +176,7 @@ Output:
 ╚══════╩════════════════════════════╝
 ```
 
-### 6. Interactive mode (full menu)
+### 8. Interactive mode (full menu)
 
 For when you want to browse, select, and send without memorizing commands.
 
@@ -155,7 +191,7 @@ Features:
 - Confirmation before sending
 - Stays open for multiple actions
 
-### 7. First-time setup
+### 9. First-time setup
 
 ```bash
 bun run wspp:login
@@ -172,12 +208,17 @@ Opens a visible Chrome window. Scan the QR code with your phone. Session is save
 | `bun run wspp:contacts "name"` | Search contacts |
 | `bun run wspp "Name" "msg"` | Send by name |
 | `bun run wspp 3 "msg"` | Send by position |
+| `bun run wspp +51987654321 "msg"` | Send by phone number |
 | `bun run wspp 1,3,5 "msg"` | Bulk send |
 | `bun run wspp --csv data/file.csv "msg"` | Bulk send from CSV |
 | `bun run wspp --csv data/file.csv --dry-run "msg"` | Preview CSV (no send) |
+| `bun run wspp 3 --file msg.txt` | Send from text file |
+| `bun run wspp "Group" --poll "Q?" "a,b,c"` | Send poll (groups only) |
+| `bun run wspp 3 --camera` | Camera photo (3s timer) |
+| `bun run wspp 3 --camera --timer 5` | Camera with custom timer |
 | `bun run wspp 3 "msg" --at 08:00` | Scheduled send |
 | `bun run wspp:i` | Interactive mode |
-| `bun run wspp:debug` | Debug with screenshots |
+| `bun run wspp:debug-icons` | Debug WhatsApp selectors |
 
 ## How It Works
 
@@ -187,8 +228,10 @@ Opens a visible Chrome window. Scan the QR code with your phone. Session is save
 4. **Contacts**: Extracts chat names from the WhatsApp sidebar DOM
 5. **Send**: Searches contact, selects chat, types message, presses Enter
 6. **Bulk**: Iterates contacts with random 3–7s delays (anti rate-limit)
-8. **CSV**: Parses `data/*.csv`, renders `{{templates}}`, sends via bulk pipeline
-7. **Schedule**: Keeps browser open with countdown, sends at target time
+7. **CSV**: Parses `data/*.csv`, renders `{{templates}}`, sends via bulk pipeline
+8. **Poll**: Opens attach menu → Poll → fills question/options → submits
+9. **Camera**: Opens attach menu → Camera → countdown timer → capture → send
+10. **Schedule**: Keeps browser open with countdown, sends at target time
 
 ## Configuration
 
