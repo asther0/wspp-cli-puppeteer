@@ -44,16 +44,17 @@ async function wsppContacts() {
     await page.goto("https://web.whatsapp.com", { waitUntil: "networkidle2" });
     await delay(5000);
 
-    if (!(await isLoggedIn(page))) {
-      // Esperar más
-      for (let i = 0; i < 30; i++) {
-        await delay(1000);
-        if (await isLoggedIn(page)) break;
-      }
+    // Esperar hasta 60s a que cargue
+    let loaded = false;
+    for (let i = 0; i < 60; i++) {
+      if (await isLoggedIn(page)) { loaded = true; break; }
+      await delay(1000);
+      if (i > 0 && i % 10 === 0) spinner.text = `Cargando chats (${i}s)...`;
+    }
 
-      if (!(await isLoggedIn(page))) {
-        throw new Error("Sesión expirada. Ejecuta: bun run wspp:login");
-      }
+    if (!loaded) {
+      await page.screenshot({ path: "wspp-contacts-debug.png" });
+      throw new Error("No se pudo cargar. Revisa wspp-contacts-debug.png o ejecuta: bun run wspp:login");
     }
 
     spinner.text = "Sesión activa...";

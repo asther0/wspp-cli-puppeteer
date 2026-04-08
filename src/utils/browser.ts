@@ -19,7 +19,7 @@ export async function launchBrowser(persistSession = false, forceVisible = false
 
   return await puppeteer.launch({
     executablePath: CHROME_PATH,
-    headless: useHeadless,
+    headless: useHeadless ? "new" : false,
     args: LAUNCH_ARGS,
     defaultViewport: DEFAULT_VIEWPORT,
     ...(persistSession ? { userDataDir: WSPP_USER_DATA_DIR } : {}),
