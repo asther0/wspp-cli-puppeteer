@@ -1,94 +1,135 @@
-# 🤖 Puppeteer Demo
+# WSPP-CLI
 
-Demo de automatización web usando Puppeteer y Bun. Proyecto inspirado en wspp-cli para mostrar capacidades de web scraping, búsquedas automatizadas, screenshots e interacción con páginas web.
+WhatsApp Web automation from your terminal. Send messages, list contacts, bulk send, schedule — all from the command line.
 
-## 📦 Instalación
+## Features
+
+- **Send messages** by name, position (#), or phone number
+- **List contacts** with search and phone number display
+- **Interactive mode** with arrow-key navigation menus
+- **Bulk messaging** to multiple contacts at once
+- **Scheduled messages** with countdown timer
+- **Persistent session** — scan QR once, use forever
+- **Background mode** — no visible browser after first login
+
+## Requirements
+
+- [Bun](https://bun.sh) >= 1.0
+- Google Chrome installed
+- Windows (Chrome path in `src/constants.ts`)
+
+## Install
 
 ```bash
+git clone https://github.com/asther0/wspp-cli.git
+cd wspp-cli
 bun install
 ```
 
-## 🚀 Comandos Disponibles
+## Quick Start
 
-### 0. Demo Completo (Recomendado)
-Ejecuta una demostración completa con múltiples tareas:
 ```bash
-bun run demo
-```
-**Incluye:**
-- ✓ Navegación a GitHub
-- ✓ Extracción de repos trending
-- ✓ Screenshot automático
-- ✓ Información del navegador
+# 1. Login (scan QR once)
+bun run wspp:login
 
-### 1. Web Scraping
-Extrae los repositorios trending de GitHub:
+# 2. List your contacts
+bun run wspp:contacts
+
+# 3. Send a message
+bun run wspp 3 "Hello!"
+```
+
+## Usage
+
+### Send Message
+
 ```bash
-bun run scrape
+# By contact name
+bun run wspp "Juan" "Hola!"
+
+# By position from contact list
+bun run wspp 3 "Hola!"
+
+# By phone number
+bun run wspp "+51999123456" "Hola!"
 ```
 
-### 2. Búsqueda Automatizada
-Busca en Google y extrae los primeros resultados:
+### Bulk Send
+
 ```bash
-bun run search "tu búsqueda aquí"
-# Ejemplo: bun run search "puppeteer automation"
+# Send to multiple contacts by position
+bun run wspp 1,3,5 "Meeting at 3pm"
 ```
 
-### 3. Screenshot
-Toma una captura de pantalla completa de cualquier sitio:
+### Scheduled Message
+
 ```bash
-bun run screenshot https://example.com
+# Send at a specific time (24h format)
+bun run wspp 3 "Happy birthday!" --at 08:00
 ```
 
-### 4. Interacción
-Demuestra interacciones básicas con páginas web:
+### List Contacts
+
 ```bash
-bun run interact
+# Recent chats
+bun run wspp:contacts
+
+# Search by keyword
+bun run wspp:contacts "Juan"
 ```
 
-### 5. WhatsApp Web (wspp-cli) 🔥
-Automatiza WhatsApp Web - **el origen del proyecto**:
+### Interactive Mode
 
-#### Demo Simple (Recomendado para empezar)
 ```bash
-bun run whatsapp:simple
+bun run wspp:i
 ```
-Abre WhatsApp Web, detecta el QR, y mantiene la sesión activa por 20 segundos.
 
-#### Demo Completo
+Arrow-key menu with: send, bulk send, view contacts, refresh, exit.
+
+### Login
+
 ```bash
-# Abrir WhatsApp Web y ver últimos chats
-bun run whatsapp
+bun run wspp:login
 ```
 
-#### Enviar Mensajes Automáticos
-```bash
-bun run whatsapp:send "Nombre del Contacto" "Tu mensaje aquí"
+Opens a visible browser to scan QR. Session is saved in `.wspp-session/`.
+
+## All Commands
+
+| Command | Description |
+|---|---|
+| `bun run wspp "Contact" "Message"` | Send message |
+| `bun run wspp 1,3,5 "Message"` | Bulk send |
+| `bun run wspp 3 "Msg" --at 08:00` | Scheduled send |
+| `bun run wspp:contacts` | List contacts |
+| `bun run wspp:login` | QR login |
+| `bun run wspp:i` | Interactive mode |
+| `bun run wspp:debug` | Debug mode |
+
+## Configuration
+
+Chrome path is set in `src/constants.ts`:
+
+```typescript
+export const CHROME_PATH = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 ```
-**Ejemplo:**
-```bash
-bun run whatsapp:send "Juan Pérez" "Hola! Este mensaje fue enviado con Puppeteer 🤖"
-```
 
-**Nota:** La primera vez necesitas escanear el código QR con tu teléfono.
+## Session
 
-## ⚙️ Configuración
+Session data lives in `.wspp-session/` (gitignored). To re-authenticate, delete this folder and run `bun run wspp:login`.
 
-El navegador Chrome debe estar instalado en:
-```
-C:\Program Files\Google\Chrome\Application\chrome.exe
-```
+## Tech Stack
 
-Puedes modificar la ruta en `src/constants.ts`.
+- **Bun** — Runtime
+- **Puppeteer** — Browser automation
+- **@inquirer/prompts** — Interactive CLI
+- **Chalk + Ora** — Terminal UI
+- **Figlet** — ASCII art
 
-## 🛠️ Tecnologías
+## License
 
-- **Bun**: Runtime JavaScript ultra-rápido
-- **Puppeteer**: Control programático de Chrome/Chromium
-- **Chalk**: Colores en terminal
-- **Ora**: Spinners elegantes
-- **CLI Table3**: Tablas formateadas
+MIT
 
-## 📝 Origen
+## Disclaimer
 
-Este proyecto nació del concepto **wspp-cli** (WhatsApp CLI automation) y evoluciona como una demostración general de automatización web con Puppeteer.
+Educational project. Use responsibly and comply with WhatsApp's Terms of Service.
