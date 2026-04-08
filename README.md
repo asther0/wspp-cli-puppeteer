@@ -10,7 +10,9 @@ Built with Puppeteer + Bun. No APIs, no tokens — just browser automation.
 - List and search contacts from recent chats
 - Interactive mode with arrow-key navigation
 - Bulk messaging to multiple contacts at once
+- CSV bulk send with `{{template}}` variables
 - Scheduled messages with real-time countdown
+- Anti-ban: random delays (3–7s) + volume warnings
 - Persistent session — scan QR once, reuse forever
 - Background mode — no visible browser window
 
@@ -42,6 +44,8 @@ bun run wspp 3 "Hello from CLI!"
 ```
 
 After scanning the QR the first time, all subsequent commands run in the background — no browser window visible.
+
+For CSV bulk sending, put your files in `data/` — see [`data/README.md`](data/README.md) for format details.
 
 ## Use Cases
 
@@ -75,13 +79,13 @@ Load recipients from a CSV file and send personalized messages.
 
 ```bash
 # Preview what would be sent (no messages sent)
-bun run wspp --csv contacts.csv --dry-run "Hello {{name}}"
+bun run wspp --csv data/contacts.csv --dry-run "Hello {{name}}"
 
 # Send for real
-bun run wspp --csv contacts.csv "Hello {{name}}, your code is {{code}}"
+bun run wspp --csv data/contacts.csv "Hello {{name}}, your code is {{code}}"
 
 # CSV with per-row messages (no default template needed)
-bun run wspp --csv contacts.csv
+bun run wspp --csv data/contacts.csv
 ```
 
 **CSV format:**
@@ -169,8 +173,8 @@ Opens a visible Chrome window. Scan the QR code with your phone. Session is save
 | `bun run wspp "Name" "msg"` | Send by name |
 | `bun run wspp 3 "msg"` | Send by position |
 | `bun run wspp 1,3,5 "msg"` | Bulk send |
-| `bun run wspp --csv file.csv "msg"` | Bulk send from CSV |
-| `bun run wspp --csv file.csv --dry-run "msg"` | Preview CSV (no send) |
+| `bun run wspp --csv data/file.csv "msg"` | Bulk send from CSV |
+| `bun run wspp --csv data/file.csv --dry-run "msg"` | Preview CSV (no send) |
 | `bun run wspp 3 "msg" --at 08:00` | Scheduled send |
 | `bun run wspp:i` | Interactive mode |
 | `bun run wspp:debug` | Debug with screenshots |
@@ -182,7 +186,8 @@ Opens a visible Chrome window. Scan the QR code with your phone. Session is save
 3. **Background**: On subsequent runs, Chrome opens off-screen (position -2400,-2400)
 4. **Contacts**: Extracts chat names from the WhatsApp sidebar DOM
 5. **Send**: Searches contact, selects chat, types message, presses Enter
-6. **Bulk**: Iterates contacts with 3s delay between sends (anti rate-limit)
+6. **Bulk**: Iterates contacts with random 3–7s delays (anti rate-limit)
+8. **CSV**: Parses `data/*.csv`, renders `{{templates}}`, sends via bulk pipeline
 7. **Schedule**: Keeps browser open with countdown, sends at target time
 
 ## Configuration
