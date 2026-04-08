@@ -69,7 +69,9 @@ async function wsppCli() {
     console.log(chalk.gray('     bun run wspp "Contacto" "Mensaje"      → por nombre'));
     console.log(chalk.gray('     bun run wspp 3 "Mensaje"               → por posición (#)'));
     console.log(chalk.gray('     bun run wspp +51987654321 "Mensaje"    → por teléfono'));
-    console.log(chalk.gray('     bun run wspp 1,3,5 "Mensaje"           → envío masivo'));
+    console.log(chalk.gray('     bun run wspp "1,3,5" "Mensaje"         → masivo por #'));
+    console.log(chalk.gray('     bun run wspp "Juan,María" "Mensaje"    → masivo por nombre'));
+    console.log(chalk.gray('     bun run wspp "+51...,+56..." "Mensaje" → masivo por tel'));
     console.log(chalk.gray('     bun run wspp 3 "Msg" --at 08:00       → programado'));
     console.log(chalk.gray('     bun run wspp:contacts                  → ver contactos'));
     console.log(chalk.gray('     bun run wspp:i                         → modo interactivo\n'));
@@ -125,9 +127,14 @@ async function wsppCli() {
 
     // Bulk mode
     if (isBulk) {
-      spinner.start("Obteniendo contactos...");
-      const contacts = await extractContacts(page);
-      spinner.succeed(chalk.green(`${contacts.length} contactos cargados`));
+      // Only load contacts if any target is a position number
+      const hasPositions = targets.some(t => /^\d+$/.test(t));
+      let contacts: Awaited<ReturnType<typeof extractContacts>> = [];
+      if (hasPositions) {
+        spinner.start("Obteniendo contactos...");
+        contacts = await extractContacts(page);
+        spinner.succeed(chalk.green(`${contacts.length} contactos cargados`));
+      }
 
       console.log();
       const result = await sendBulkMessages(page, targets, message, contacts);
