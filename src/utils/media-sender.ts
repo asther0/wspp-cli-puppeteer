@@ -7,19 +7,13 @@ const IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".mov"];
 const DOC_EXTS = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".zip", ".rar", ".txt", ".csv"];
 const MAX_FILE_SIZE = 16 * 1024 * 1024; // 16 MB
 
-// Candidate data-icon values for the attach/plus button
-const ATTACH_ICONS = ["plus", "attach-menu-plus", "clip", "attach"];
+// "plus" is emoji/sticker — NOT the attach button. Use "attach-menu-plus" or "clip".
+const ATTACH_ICONS = ["attach-menu-plus", "clip", "attach"];
 
-// Candidate selectors for image/photo option in attach menu
+// Candidate selectors for each menu option
 const IMAGE_OPTION_ICONS = ["attach-image", "image", "gallery", "media", "attach-photo"];
-
-// Candidate selectors for document option in attach menu
 const DOC_OPTION_ICONS = ["attach-document", "document", "attach-file"];
-
-// Candidate selectors for poll option
 const POLL_OPTION_ICONS = ["poll", "attach-poll"];
-
-// Candidate selectors for camera option
 const CAMERA_OPTION_ICONS = ["attach-camera", "camera"];
 
 /**
@@ -80,29 +74,44 @@ async function validateFile(filePath: string, allowedExts: string[]): Promise<st
 }
 
 /**
- * Click the attachment (+) button in the chat footer.
+ * Click the attachment button in the chat footer.
+ * Priority: aria-label (reliable) → data-icon → title attribute.
  */
 async function clickAttachButton(page: Page): Promise<void> {
-  const matched = await clickByIconCandidates(page, ATTACH_ICONS);
-  if (matched) {
+  // Strategy 1: aria-label / title (most reliable across languages)
+  const ariaClicked = await page.evaluate(() => {
+    // Look in the header area of the conversation (not the sidebar)
+    const containers = document.querySelectorAll("header, #main header, [data-tab]");
+    for (const container of containers) {
+      const btns = container.querySelectorAll("button, [role='button']");
+      for (const btn of btns) {
+        const label = (btn.getAttribute("aria-label") || btn.getAttribute("title") || "").toLowerCase();
+        if (label.includes("adjunt") || label.includes("attach")) {
+          (btn as HTMLElement).click();
+          return label;
+        }
+      }
+    }
+    // Also check all buttons on the page
+    const allBtns = document.querySelectorAll("button, [role='button']");
+    for (const btn of allBtns) {
+      const label = (btn.getAttribute("aria-label") || btn.getAttribute("title") || "").toLowerCase();
+      if (label.includes("adjunt") || label.includes("attach")) {
+        (btn as HTMLElement).click();
+        return label;
+      }
+    }
+    return null;
+  });
+
+  if (ariaClicked) {
     await delay(1000);
     return;
   }
 
-  // Fallback: try aria-label patterns
-  const fallback = await page.evaluate(() => {
-    const btns = document.querySelectorAll("footer button, header button");
-    for (const btn of btns) {
-      const label = btn.getAttribute("aria-label") || "";
-      if (/adjunt|attach|plus|\+/i.test(label)) {
-        (btn as HTMLElement).click();
-        return true;
-      }
-    }
-    return false;
-  });
-
-  if (fallback) {
+  // Strategy 2: data-icon candidates (skip "plus" — that's emoji/sticker)
+  const iconClicked = await clickByIconCandidates(page, ATTACH_ICONS);
+  if (iconClicked) {
     await delay(1000);
     return;
   }
@@ -217,35 +226,57 @@ async function typeCaptionAndSend(page: Page, caption?: string): Promise<void> {
 }
 
 /**
+ * Click a menu option in the attachment menu by icon or text.
+ */
+async function clickMenuOption(page: Page, iconCandidates: string[], textPatterns: RegExp): Promise<void> {
+  const clicked = await clickByIconCandidates(page, iconCandidates);
+  if (clicked) return;
+
+  // Fallback: match by visible text in menu items
+  const textClicked = await page.evaluate((pattern: string) => {
+    const re = new RegExp(pattern, "i");
+    const items = document.querySelectorAll('[role="button"], li, [role="menuitem"], button');
+    for (const item of items) {
+      const text = (item as HTMLElement).innerText || "";
+      const label = item.getAttribute("aria-label") || "";
+      if (re.test(text) || re.test(label)) {
+        (item as HTMLElement).click();
+        return true;
+      }
+    }
+    return false;
+  }, textPatterns.source);
+
+  if (!textClicked) {
+    const available = await listVisibleIcons(page);
+    throw new Error(`No se encontró la opción en el menú. Iconos: ${available.join(", ")}`);
+  }
+}
+
+/**
  * Send an image (or video) with optional caption.
+ * Uses waitForFileChooser to reliably intercept the file dialog.
  */
 export async function sendImage(page: Page, filePath: string, caption?: string): Promise<void> {
   const resolved = await validateFile(filePath, IMAGE_EXTS);
 
   await clickAttachButton(page);
 
-  // Try clicking image option in menu
-  const clicked = await clickByIconCandidates(page, IMAGE_OPTION_ICONS);
+  // Set up file chooser interceptor BEFORE clicking the menu option
+  const fileChooserPromise = page.waitForFileChooser({ timeout: 8000 }).catch(() => null);
 
-  if (!clicked) {
-    // Fallback: look for menu items by text
-    await page.evaluate(() => {
-      const items = document.querySelectorAll('[role="button"], li, [role="menuitem"]');
-      for (const item of items) {
-        const text = (item as HTMLElement).innerText || "";
-        if (/foto|photo|image|video|media|galería|gallery/i.test(text)) {
-          (item as HTMLElement).click();
-          return;
-        }
-      }
-    });
-  }
-
+  await clickMenuOption(page, IMAGE_OPTION_ICONS, /foto|photo|image|video|media|galería|gallery/);
   await delay(500);
 
-  const uploaded = await uploadToFileInput(page, resolved, "image");
-  if (!uploaded) {
-    throw new Error("No se encontró el input de archivo para imágenes.");
+  const fileChooser = await fileChooserPromise;
+  if (fileChooser) {
+    await fileChooser.accept([resolved]);
+  } else {
+    // Fallback: try direct input upload
+    const uploaded = await uploadToFileInput(page, resolved, "image");
+    if (!uploaded) {
+      throw new Error("No se pudo subir la imagen. Ejecuta: bun run wspp:debug-icons");
+    }
   }
 
   await typeCaptionAndSend(page, caption);
@@ -259,26 +290,19 @@ export async function sendDocument(page: Page, filePath: string, caption?: strin
 
   await clickAttachButton(page);
 
-  const clicked = await clickByIconCandidates(page, DOC_OPTION_ICONS);
+  const fileChooserPromise = page.waitForFileChooser({ timeout: 8000 }).catch(() => null);
 
-  if (!clicked) {
-    await page.evaluate(() => {
-      const items = document.querySelectorAll('[role="button"], li, [role="menuitem"]');
-      for (const item of items) {
-        const text = (item as HTMLElement).innerText || "";
-        if (/document|archivo|file/i.test(text)) {
-          (item as HTMLElement).click();
-          return;
-        }
-      }
-    });
-  }
-
+  await clickMenuOption(page, DOC_OPTION_ICONS, /document|archivo|file/);
   await delay(500);
 
-  const uploaded = await uploadToFileInput(page, resolved);
-  if (!uploaded) {
-    throw new Error("No se encontró el input de archivo para documentos.");
+  const fileChooser = await fileChooserPromise;
+  if (fileChooser) {
+    await fileChooser.accept([resolved]);
+  } else {
+    const uploaded = await uploadToFileInput(page, resolved);
+    if (!uploaded) {
+      throw new Error("No se pudo subir el documento. Ejecuta: bun run wspp:debug-icons");
+    }
   }
 
   await typeCaptionAndSend(page, caption);
