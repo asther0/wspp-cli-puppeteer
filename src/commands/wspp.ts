@@ -197,7 +197,17 @@ async function wsppCli() {
     await page.goto("https://web.whatsapp.com", { waitUntil: "networkidle2" });
     await delay(5000);
 
-    if (await isLoggedIn(page)) {
+    // Wait for session to load (WhatsApp takes a few seconds even with existing session)
+    let loggedIn = await isLoggedIn(page);
+    if (!loggedIn) {
+      spinner.text = "Cargando sesión...";
+      for (let i = 0; i < 15; i++) {
+        await delay(1000);
+        if (await isLoggedIn(page)) { loggedIn = true; break; }
+      }
+    }
+
+    if (loggedIn) {
       spinner.succeed(chalk.green("Sesión activa"));
     } else {
       await waitForLogin(page, spinner);
