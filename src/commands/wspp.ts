@@ -34,7 +34,7 @@ async function waitForLogin(page: Page, spinner: ReturnType<typeof ora>): Promis
   throw new Error("Timeout esperando login.");
 }
 
-function parseArgs() {
+async function parseArgs() {
   const args = process.argv.slice(2);
 
   // Extract --at flag
@@ -53,6 +53,14 @@ function parseArgs() {
     args.splice(csvIdx, 2);
   }
 
+  // Extract --file flag
+  let filePath: string | null = null;
+  const fileIdx = args.indexOf("--file");
+  if (fileIdx !== -1 && args[fileIdx + 1]) {
+    filePath = args[fileIdx + 1];
+    args.splice(fileIdx, 2);
+  }
+
   // Extract --dry-run flag
   let dryRun = false;
   const dryIdx = args.indexOf("--dry-run");
@@ -62,7 +70,17 @@ function parseArgs() {
   }
 
   const firstArg = args[0] || "";
-  const message = csvPath ? args.join(" ") : args.slice(1).join(" ");
+  let message = csvPath ? args.join(" ") : args.slice(1).join(" ");
+
+  // Read message from file (overrides CLI message)
+  if (filePath) {
+    const file = Bun.file(filePath);
+    if (!(await file.exists())) {
+      console.log(chalk.red(`\n  ❌ Archivo no encontrado: ${filePath}\n`));
+      process.exit(1);
+    }
+    message = (await file.text()).trimEnd();
+  }
 
   // Detect bulk: "José,María" (commas) or "2 3 4 5" (PowerShell expands commas for digits)
   const allDigitsWithSpaces = /^\d+(\s+\d+)+$/.test(firstArg.trim());
@@ -81,7 +99,7 @@ function parseArgs() {
 }
 
 async function wsppCli() {
-  const { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun } = parseArgs();
+  const { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun } = await parseArgs();
 
   // CSV mode: only needs --csv flag (message is optional template)
   if (csvPath) {
@@ -141,6 +159,7 @@ async function wsppCli() {
     console.log(chalk.gray('     bun run wspp "Juan,María" "Mensaje"       → masivo por nombre'));
     console.log(chalk.gray('     bun run wspp "+51...,+56..." "Mensaje"    → masivo por tel'));
     console.log(chalk.gray('     bun run wspp --csv contactos.csv "Hola"   → masivo desde CSV'));
+    console.log(chalk.gray('     bun run wspp 3 --file msg.txt            → mensaje desde archivo'));
     console.log(chalk.gray('     bun run wspp 3 "Msg" --at 08:00          → programado'));
     console.log(chalk.gray('     bun run wspp:contacts                     → ver contactos'));
     console.log(chalk.gray('     bun run wspp:i                            → modo interactivo\n'));

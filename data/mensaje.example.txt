@@ -1,0 +1,11 @@
+*Hola {{name}}* 👋
+
+Te escribimos de *Cecica* para recordarte:
+
+- Tu cita es _mañana a las 10:00 AM_
+- Trae tu DNI
+- Llega 15 min antes
+
+~No olvides confirmar~
+
+Gracias, el equipo de *Cecica*
