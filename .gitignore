@@ -1,4 +1,4 @@
-# dependencies (bun install)
+# dependencies
 node_modules
 
 # output
@@ -6,38 +6,29 @@ out
 dist
 *.tgz
 
-# code coverage
-coverage
-*.lcov
-
 # logs
 logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+*.log
 
-# dotenv environment variable files
+# dotenv
 .env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.env.*
 
 # caches
 .eslintcache
 .cache
 *.tsbuildinfo
 
-# IntelliJ based IDEs
+# IDEs
 .idea
+.vscode
 
-# Finder (MacOS) folder config
+# OS
 .DS_Store
+Thumbs.db
 
-# Screenshots generados
-screenshot-*.png
-debug-*.png
-step*.png
-wspp-*.png
+# Screenshots (generated at runtime)
+*.png
 
-# WhatsApp session
+# WhatsApp session data
 .wspp-session/
