@@ -2,7 +2,7 @@ import chalk from "chalk";
 import ora from "ora";
 import { launchBrowser, closeBrowser, hasSession } from "../utils/browser";
 import { extractContacts } from "../utils/contacts";
-import { sendMessage } from "../utils/sender";
+import { sendMessage, sendMessageByPosition } from "../utils/sender";
 import { sendBulkMessages } from "../utils/bulk-sender";
 import { showBanner } from "../ui/banner";
 import type { Page } from "puppeteer-core";
@@ -147,12 +147,16 @@ async function wsppCli() {
 
         contactName = contacts[pos - 1].name;
         spinner.succeed(chalk.green(`Contacto #${pos}: ${contactName}`));
+
+        // Click directly on sidebar listitem — avoids search issues with communities
+        spinner.start(`Enviando a "${contactName}"...`);
+        await sendMessageByPosition(page, pos, message);
       } else {
         contactName = firstArg;
-      }
 
-      spinner.start(`Enviando a "${contactName}"...`);
-      await sendMessage(page, contactName, message);
+        spinner.start(`Enviando a "${contactName}"...`);
+        await sendMessage(page, contactName, message);
+      }
 
       await page.screenshot({ path: "wspp-sent.png" });
       spinner.succeed(chalk.bold.green("MENSAJE ENVIADO"));

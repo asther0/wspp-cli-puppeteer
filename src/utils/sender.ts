@@ -114,7 +114,42 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
   await delay(3000);
 }
 
+export async function selectContactByPosition(page: Page, position: number): Promise<void> {
+  // Click the listitem directly from sidebar — no search needed
+  const listItems = await page.$$('#side [role="listitem"]');
+  if (position < 1 || position > listItems.length) {
+    throw new Error(`Posición #${position} inválida. Solo hay ${listItems.length} chats visibles.`);
+  }
+
+  await listItems[position - 1].click();
+  await delay(3000);
+
+  // Verify message box exists
+  const hasMessageBox = await page.evaluate(() => {
+    const footer = document.querySelector('footer');
+    if (footer) {
+      const box = footer.querySelector('[role="textbox"], [contenteditable="true"], input, textarea');
+      if (box) return true;
+    }
+    const main = document.querySelector('main');
+    if (main) {
+      const box = main.querySelector('[role="textbox"], [contenteditable="true"], input, textarea');
+      if (box) return true;
+    }
+    return false;
+  });
+
+  if (!hasMessageBox) {
+    throw new Error(`No se puede enviar a la posición #${position}. Puede ser una comunidad sin chat directo.`);
+  }
+}
+
 export async function sendMessage(page: Page, contactName: string, message: string): Promise<void> {
   await searchAndSelectContact(page, contactName);
+  await typeAndSendMessage(page, message);
+}
+
+export async function sendMessageByPosition(page: Page, position: number, message: string): Promise<void> {
+  await selectContactByPosition(page, position);
   await typeAndSendMessage(page, message);
 }
