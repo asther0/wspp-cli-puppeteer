@@ -12,6 +12,7 @@ function isJunk(name: string): boolean {
   if (/^\d{1,2}:\d{2}/.test(clean)) return true;
   if (/^borrador/i.test(clean) || /^draft/i.test(clean)) return true;
   if (/^(buscar|search|chats|loading)/i.test(clean)) return true;
+  if (/https?:\/\//.test(clean)) return true;
   return false;
 }
 
@@ -83,26 +84,8 @@ export async function extractContacts(page: Page, max = 10): Promise<Contact[]> 
       }
     }
 
-    // Debug: log what we found
-    const debugInfo = {
-      listitemCount: document.querySelectorAll('[role="listitem"]').length,
-      cellFrameCount: document.querySelectorAll('[data-testid^="cell-frame"]').length,
-      sideExists: !!document.querySelector('#side'),
-      spanTitleInSide: document.querySelector('#side')?.querySelectorAll('span[title]').length || 0,
-      resultsCount: results.length,
-      firstResults: results.slice(0, 3).map(r => `[${r.source}] ${r.name}`),
-    };
-    (window as any).__wsppDebug = debugInfo;
-
     return results.slice(0, 30);
   });
-
-  // Log debug info
-  const debug = await page.evaluate(() => (window as any).__wsppDebug);
-  if (raw.length === 0) {
-    console.log('\n  [debug] DOM state:', JSON.stringify(debug, null, 2));
-    await page.screenshot({ path: "wspp-contacts-debug.png" });
-  }
 
   return raw
     .filter(({ name }) => !isJunk(name))
