@@ -1,6 +1,5 @@
 import chalk from "chalk";
 import ora from "ora";
-import Table from "cli-table3";
 import { launchBrowser, closeBrowser, hasSession } from "../utils/browser";
 import type { Page } from "puppeteer-core";
 
@@ -140,32 +139,48 @@ async function wsppContacts() {
       return results.slice(0, 15);
     });
 
-    spinner.succeed(chalk.green(`✓ ${contacts.length} contactos encontrados`));
+    // Filter out non-contact entries
+    const NOISE = ["you", "aún no", "hola desde", "http", "buscar", "search", "chats"];
+    const filtered = contacts
+      .map(c => c.name)
+      .filter(name => {
+        const lower = name.toLowerCase();
+        return !NOISE.some(n => lower.includes(n))
+          && name.length > 1
+          && !/^\d{1,2}:\d{2}/.test(name)
+          && !/^(AM|PM)$/i.test(name);
+      });
 
-    if (contacts.length === 0) {
+    spinner.succeed(chalk.green(`✓ ${filtered.length} contactos encontrados`));
+
+    if (filtered.length === 0) {
       console.log(chalk.yellow("\n⚠️  No se encontraron contactos"));
       if (keyword) {
         console.log(chalk.gray(`  Intenta con otro término en vez de "${keyword}"\n`));
       }
     } else {
-      const table = new Table({
-        head: [
-          chalk.cyan("#"),
-          chalk.cyan("Contacto"),
-          chalk.cyan("Último mensaje"),
-        ],
-        colWidths: [5, 30, 45],
-        wordWrap: true,
+      const maxLen = Math.max(...filtered.map(n => n.length), 20);
+      const colW = maxLen + 4;
+      const numW = 4;
+      const totalW = numW + 3 + colW;
+
+      const line = (l: string, m: string, r: string, fill: string) =>
+        l + fill.repeat(numW + 2) + m + fill.repeat(colW + 2) + r;
+
+      console.log(chalk.cyan("\n" + line("╔", "╦", "╗", "═")));
+      console.log(chalk.cyan("║") + chalk.bold.white(" #".padEnd(numW + 2)) + chalk.cyan("║") + chalk.bold.white(" Contacto".padEnd(colW + 2)) + chalk.cyan("║"));
+      console.log(chalk.cyan(line("╠", "╬", "╣", "═")));
+
+      filtered.forEach((name, i) => {
+        const num = ` ${String(i + 1).padEnd(numW + 1)}`;
+        const col = ` ${name.padEnd(colW + 1)}`;
+        console.log(chalk.cyan("║") + chalk.white(num) + chalk.cyan("║") + chalk.green(col) + chalk.cyan("║"));
       });
 
-      contacts.forEach((c, i) => {
-        table.push([String(i + 1), c.name, c.lastMsg || "..."]);
-      });
-
-      console.log("\n" + table.toString());
+      console.log(chalk.cyan(line("╚", "╩", "╝", "═")));
 
       console.log(chalk.bold.yellow("\n💡 Para enviar mensaje:"));
-      console.log(chalk.gray(`   bun run wspp "${contacts[0]?.name}" "Tu mensaje aquí"\n`));
+      console.log(chalk.gray(`   bun run wspp "${filtered[0]}" "Tu mensaje aquí"\n`));
     }
 
   } catch (error: any) {
