@@ -9,7 +9,8 @@
     "wspp": "bun run src/commands/wspp.ts",
     "wspp:login": "bun run src/commands/wspp-login.ts",
     "wspp:contacts": "bun run src/commands/wspp-contacts.ts",
-    "wspp:i": "bun run src/commands/wspp-interactive.ts"
+    "wspp:i": "bun run src/commands/wspp-interactive.ts",
+    "wspp:debug-icons": "bun run src/commands/wspp-debug-icons.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"

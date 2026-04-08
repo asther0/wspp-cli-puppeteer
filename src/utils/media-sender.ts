@@ -149,13 +149,35 @@ async function typeCaptionAndSend(page: Page, caption?: string): Promise<void> {
   await delay(3000);
 
   if (caption) {
-    // Find caption textbox in the preview modal (different from footer textbox)
-    const captionBox = await page.$('[data-testid="media-caption-input-container"] [role="textbox"]')
-      || await page.$('.overlay [role="textbox"][contenteditable="true"]')
-      || await page.$('[role="dialog"] [role="textbox"]');
+    // Find caption textbox in the preview modal.
+    // The modal overlay has a textbox that is NOT the footer compose box.
+    const captionBox = await page.evaluate(() => {
+      // Strategy 1: known data-testid
+      const known = document.querySelector('[data-testid="media-caption-input-container"] [role="textbox"]');
+      if (known) { (known as HTMLElement).click(); return true; }
+
+      // Strategy 2: find all contenteditable textboxes, pick the one NOT in footer
+      const boxes = document.querySelectorAll('[role="textbox"][contenteditable="true"]');
+      for (const box of boxes) {
+        if (!box.closest("footer")) {
+          (box as HTMLElement).click();
+          return true;
+        }
+      }
+
+      // Strategy 3: any contenteditable not in footer
+      const editables = document.querySelectorAll('[contenteditable="true"]');
+      for (const el of editables) {
+        if (!el.closest("footer") && !el.closest("#side")) {
+          (el as HTMLElement).click();
+          return true;
+        }
+      }
+
+      return false;
+    });
 
     if (captionBox) {
-      await captionBox.click();
       await delay(300);
 
       // Handle multi-line captions with Shift+Enter
