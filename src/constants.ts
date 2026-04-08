@@ -3,9 +3,7 @@ export const CHROME_PATH =
 
 export const LAUNCH_ARGS = [
   "--no-sandbox",
-  "--disable-gpu",
   "--disable-dev-shm-usage",
-  "--disable-software-rasterizer",
 ];
 
 export const DEFAULT_TIMEOUT = 30_000;

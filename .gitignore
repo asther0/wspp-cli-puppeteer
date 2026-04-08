@@ -35,3 +35,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Screenshots generados
 screenshot-*.png
+debug-*.png
+step*.png
+wspp-*.png
+
+# WhatsApp session
+.wspp-session/

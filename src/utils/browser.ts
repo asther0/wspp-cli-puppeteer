@@ -1,4 +1,5 @@
 import puppeteer, { Browser, Page } from "puppeteer-core";
+import path from "path";
 import {
   CHROME_PATH,
   LAUNCH_ARGS,
@@ -6,12 +7,15 @@ import {
   DEFAULT_VIEWPORT,
 } from "../constants";
 
-export async function launchBrowser(): Promise<Browser> {
+const WSPP_USER_DATA_DIR = path.join(process.cwd(), ".wspp-session");
+
+export async function launchBrowser(persistSession = false): Promise<Browser> {
   return await puppeteer.launch({
     executablePath: CHROME_PATH,
     headless: false,
     args: LAUNCH_ARGS,
     defaultViewport: DEFAULT_VIEWPORT,
+    ...(persistSession ? { userDataDir: WSPP_USER_DATA_DIR } : {}),
   });
 }
 
