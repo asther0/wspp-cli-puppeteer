@@ -129,8 +129,39 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
   }
   await delay(1500);
 
-  // page.$() checks instantly (no timeout wait) — if found, elementHandle.click()
-  // uses real mouse events that fire React's synthetic listeners correctly.
+  // --- DEBUG: snapshot del estado justo antes de intentar enviar ---
+  await page.screenshot({ path: "wspp-send-debug.png" });
+  const debugState = await page.evaluate(() => {
+    // Todos los iconos visibles
+    const icons = Array.from(document.querySelectorAll("span[data-icon]"))
+      .map((el) => {
+        const r = (el as HTMLElement).getBoundingClientRect();
+        return { icon: el.getAttribute("data-icon"), visible: r.width > 0 && r.height > 0, top: Math.round(r.top), left: Math.round(r.left) };
+      })
+      .filter((x) => x.visible);
+
+    // Todos los botones visibles con su aria-label
+    const btns = Array.from(document.querySelectorAll("button, [role='button']"))
+      .map((el) => {
+        const r = (el as HTMLElement).getBoundingClientRect();
+        return { label: el.getAttribute("aria-label") || "", visible: r.width > 0 && r.height > 0, top: Math.round(r.top), left: Math.round(r.left) };
+      })
+      .filter((x) => x.visible && x.label);
+
+    // Contenido actual del compose box
+    const box = document.querySelector('footer [role="textbox"][contenteditable="true"]');
+    const boxText = box ? (box as HTMLElement).innerText : "NO ENCONTRADO";
+    const boxFocused = box ? document.activeElement === box : false;
+
+    return { icons, btns, boxText, boxFocused };
+  });
+  await Bun.write("wspp-send-debug.json", JSON.stringify(debugState, null, 2));
+  console.log("\n[DEBUG] compose box text:", JSON.stringify(debugState.boxText).slice(0, 80));
+  console.log("[DEBUG] compose focused:", debugState.boxFocused);
+  console.log("[DEBUG] visible icons:", debugState.icons.map((i) => i.icon).join(", "));
+  console.log("[DEBUG] visible btns:", debugState.btns.map((b) => `"${b.label}"`).join(", "));
+  // --- FIN DEBUG ---
+
   const SEND_SELECTORS = [
     'button[aria-label="Send"]',
     'button[aria-label="Enviar"]',
@@ -144,6 +175,7 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
   for (const sel of SEND_SELECTORS) {
     const el = await page.$(sel);
     if (el) {
+      console.log(`[DEBUG] send via: ${sel}`);
       await el.click();
       sent = true;
       break;
@@ -151,7 +183,7 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
   }
 
   if (!sent) {
-    // Re-focus the compose box before Enter — long selector loops can lose focus.
+    console.log("[DEBUG] send via: keyboard Enter (re-focus + Enter)");
     const box = await page.$('footer [role="textbox"][contenteditable="true"]');
     if (box) {
       await box.click();
