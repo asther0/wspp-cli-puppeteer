@@ -129,9 +129,8 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
   }
   await delay(1500);
 
-  // Use page.click() (real mouse events) — evaluate-based element.click() does not
-  // fire React's synthetic event listeners on WhatsApp's send button, so the message
-  // stays in the compose box even though clickedSend returns true.
+  // page.$() checks instantly (no timeout wait) — if found, elementHandle.click()
+  // uses real mouse events that fire React's synthetic listeners correctly.
   const SEND_SELECTORS = [
     'button[aria-label="Send"]',
     'button[aria-label="Enviar"]',
@@ -143,16 +142,21 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
 
   let sent = false;
   for (const sel of SEND_SELECTORS) {
-    try {
-      await page.click(sel, { timeout: 2000 });
+    const el = await page.$(sel);
+    if (el) {
+      await el.click();
       sent = true;
       break;
-    } catch {
-      // try next selector
     }
   }
 
   if (!sent) {
+    // Re-focus the compose box before Enter — long selector loops can lose focus.
+    const box = await page.$('footer [role="textbox"][contenteditable="true"]');
+    if (box) {
+      await box.click();
+      await delay(300);
+    }
     await page.keyboard.press("Enter");
   }
 
