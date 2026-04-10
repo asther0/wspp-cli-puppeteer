@@ -265,11 +265,12 @@ async function wsppCli() {
     await page.goto("https://web.whatsapp.com", { waitUntil: "networkidle2" });
     await delay(5000);
 
-    // Wait for session to load (WhatsApp takes a few seconds even with existing session)
+    // Wait for session to load. Visible browser (docs/camera) takes longer than headless.
     let loggedIn = await isLoggedIn(page);
     if (!loggedIn) {
       spinner.text = "Cargando sesión...";
-      for (let i = 0; i < 15; i++) {
+      const maxWait = forceVisible ? 40 : 15;
+      for (let i = 0; i < maxWait; i++) {
         await delay(1000);
         if (await isLoggedIn(page)) { loggedIn = true; break; }
       }

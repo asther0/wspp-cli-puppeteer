@@ -359,7 +359,79 @@ export async function sendDocument(page: Page, filePath: string, caption?: strin
     );
   }
 
-  await typeCaptionAndSend(page, caption);
+  // Wait for document to upload and the preview modal to render.
+  // Documents can take longer than images depending on file size.
+  await delay(5000);
+
+  // Type caption in the document preview modal if provided.
+  if (caption) {
+    const captionFocused = await page.evaluate(() => {
+      // Priority 1: known data-testid for media caption input
+      const known = document.querySelector(
+        '[data-testid="media-caption-input-container"] [role="textbox"]',
+      );
+      if (known) {
+        (known as HTMLElement).click();
+        return true;
+      }
+      // Priority 2: any contenteditable textbox outside the footer and sidebar
+      const boxes = document.querySelectorAll('[role="textbox"][contenteditable="true"]');
+      for (const box of boxes) {
+        if (!box.closest("footer") && !box.closest("#side")) {
+          (box as HTMLElement).click();
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (captionFocused) {
+      await delay(300);
+      const lines = caption.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].length > 0) {
+          await page.keyboard.type(lines[i], { delay: 50 });
+        }
+        if (i < lines.length - 1) {
+          await page.keyboard.down("Shift");
+          await page.keyboard.press("Enter");
+          await page.keyboard.up("Shift");
+        }
+      }
+      await delay(500);
+    }
+  }
+
+  // Send the document. Try the send icon in the preview modal first, then Enter.
+  const sent = await page.evaluate(() => {
+    for (const iconName of ["send", "send-white"]) {
+      const icon = document.querySelector(`span[data-icon="${iconName}"]`);
+      if (icon) {
+        const btn = icon.closest("button") || (icon.parentElement as HTMLElement | null);
+        if (btn) {
+          (btn as HTMLElement).click();
+          return iconName;
+        }
+      }
+    }
+    // Fallback: button with aria-label send/enviar
+    const btns = document.querySelectorAll('button, [role="button"]');
+    for (const btn of btns) {
+      const label = (btn.getAttribute("aria-label") || "").toLowerCase();
+      if (label === "send" || label === "enviar") {
+        (btn as HTMLElement).click();
+        return "aria";
+      }
+    }
+    return null;
+  });
+
+  if (!sent) {
+    // Last resort: Enter key works in WhatsApp Web document preview
+    await page.keyboard.press("Enter");
+  }
+
+  await delay(4000);
 }
 
 /**
