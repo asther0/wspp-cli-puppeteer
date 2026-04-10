@@ -113,8 +113,10 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
   await messageBox.click();
   await delay(500);
 
-  // Handle multi-line messages: Shift+Enter for line breaks (Enter alone sends the message)
-  const lines = message.split('\n');
+  // Normalize line endings (\r\n on Windows, \r on old Mac) before splitting.
+  // Without this, the \r character gets typed and WhatsApp interprets it as Enter,
+  // splitting one multi-line message into multiple sent messages.
+  const lines = message.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].length > 0) {
       await page.keyboard.type(lines[i], { delay: 50 });
