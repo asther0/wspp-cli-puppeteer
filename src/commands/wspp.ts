@@ -1,11 +1,12 @@
 import chalk from "chalk";
 import ora from "ora";
+import path from "node:path";
 import { launchBrowser, closeBrowser, hasSession } from "../utils/browser";
 import { extractContacts } from "../utils/contacts";
 import { sendMessage, sendMessageByPhone, searchAndSelectContact } from "../utils/sender";
 import { sendBulkMessages, sendCsvMessages } from "../utils/bulk-sender";
 import { parseCsv } from "../utils/csv-parser";
-import { sendPoll, sendCameraPhoto } from "../utils/media-sender";
+import { sendPoll, sendCameraPhoto, sendDocument } from "../utils/media-sender";
 import { showBanner } from "../ui/banner";
 import type { Page } from "puppeteer-core";
 
@@ -86,6 +87,35 @@ async function parseArgs() {
     args.splice(timerIdx, 2);
   }
 
+  // Extract --doc flag: path to a document file (PDF, DOCX, etc.)
+  let docPath: string | null = null;
+  const docIdx = args.indexOf("--doc");
+  if (docIdx !== -1 && args[docIdx + 1]) {
+    const rawDoc = args[docIdx + 1];
+    args.splice(docIdx, 2);
+
+    // Resolve to absolute path: try as-is first, then relative to data/
+    const resolved = path.isAbsolute(rawDoc)
+      ? rawDoc
+      : path.resolve(process.cwd(), rawDoc);
+
+    const dataFallback = path.resolve(process.cwd(), "data", rawDoc);
+
+    const resolvedFile = Bun.file(resolved);
+    const dataFile = Bun.file(dataFallback);
+
+    if (await resolvedFile.exists()) {
+      docPath = resolved;
+    } else if (await dataFile.exists()) {
+      docPath = dataFallback;
+    } else {
+      console.log(chalk.red(`\n  ❌ Documento no encontrado: ${rawDoc}`));
+      console.log(chalk.gray(`     Buscado en: ${resolved}`));
+      console.log(chalk.gray(`     Buscado en: ${dataFallback}\n`));
+      process.exit(1);
+    }
+  }
+
   // Extract --dry-run flag
   let dryRun = false;
   const dryIdx = args.indexOf("--dry-run");
@@ -121,13 +151,13 @@ async function parseArgs() {
   const isPositional = !isBulk && !csvPath && !isPhone && /^\d+$/.test(firstArg);
 
   // Media flags allow sending without a text message
-  const hasMedia = !!(pollQuestion || useCamera);
+  const hasMedia = !!(pollQuestion || useCamera || docPath);
 
-  return { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun, pollQuestion, pollOptions, useCamera, cameraTimer, hasMedia };
+  return { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun, pollQuestion, pollOptions, useCamera, cameraTimer, docPath, hasMedia };
 }
 
 async function wsppCli() {
-  const { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun, pollQuestion, pollOptions, useCamera, cameraTimer, hasMedia } = await parseArgs();
+  const { firstArg, message, isBulk, targets, isPositional, isPhone, scheduleTime, csvPath, dryRun, pollQuestion, pollOptions, useCamera, cameraTimer, docPath, hasMedia } = await parseArgs();
 
   // CSV mode: only needs --csv flag (message is optional template)
   if (csvPath) {
@@ -191,6 +221,8 @@ async function wsppCli() {
     console.log(chalk.gray('     bun run wspp "Grupo" --poll "?" "a,b,c"   → encuesta'));
     console.log(chalk.gray('     bun run wspp 3 --camera                   → foto con cámara'));
     console.log(chalk.gray('     bun run wspp 3 --camera --timer 5         → cámara con 5s delay'));
+    console.log(chalk.gray('     bun run wspp "Juan" --doc servicios.pdf        → documento (busca en data/)'));
+    console.log(chalk.gray('     bun run wspp "Juan" "Caption" --doc info.pdf   → documento con caption'));
     console.log(chalk.gray('     bun run wspp 3 "Msg" --at 08:00          → programado'));
     console.log(chalk.gray('     bun run wspp:contacts                     → ver contactos'));
     console.log(chalk.gray('     bun run wspp:i                            → modo interactivo\n'));
@@ -211,6 +243,7 @@ async function wsppCli() {
     if (message) console.log(chalk.cyan("  💬 Mensaje:"), message);
     if (pollQuestion) console.log(chalk.cyan("  📊 Encuesta:"), pollQuestion, chalk.gray(`(${pollOptions.join(", ")})`));
     if (useCamera) console.log(chalk.cyan("  📸 Cámara:"), `captura en vivo (${cameraTimer}s timer)`);
+    if (docPath) console.log(chalk.cyan("  📎 Documento:"), path.basename(docPath));
     if (scheduleTime) {
       console.log(chalk.cyan("  ⏰ Programado:"), scheduleTime);
     }
@@ -218,7 +251,8 @@ async function wsppCli() {
   }
 
   const sessionExists = hasSession();
-  const forceVisible = useCamera;
+  // Documents and camera require a visible browser window (file chooser / media stream)
+  const forceVisible = useCamera || !!docPath;
   const mode = sessionExists && !forceVisible ? "headless (background)" : "visible";
   const spinner = ora(`Iniciando [${mode}]...`).start();
   const browser = await launchBrowser(true, forceVisible, useCamera);
@@ -350,6 +384,9 @@ async function wsppCli() {
         } else if (useCamera) {
           spinner.succeed("Cámara activada");
           await sendCameraPhoto(page, cameraTimer, message || undefined);
+        } else if (docPath) {
+          spinner.text = `Enviando documento: ${path.basename(docPath)}...`;
+          await sendDocument(page, docPath, message || undefined);
         }
       }
 

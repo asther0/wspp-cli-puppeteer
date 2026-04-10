@@ -8,6 +8,7 @@ const ATTACH_ICONS = ["plus-rounded", "attach-menu-plus", "clip", "attach"];
 // Candidate selectors for each menu option (data-icon based, fallback to text/aria)
 const POLL_OPTION_ICONS = ["poll", "attach-poll"];
 const CAMERA_OPTION_ICONS = ["attach-camera", "camera"];
+const DOCUMENT_OPTION_ICONS = ["attach-document", "document", "attach-doc", "attach-file"];
 
 /**
  * Try to click an element matching one of the candidate data-icon values.
@@ -321,6 +322,44 @@ export async function sendPoll(page: Page, question: string, options: string[]):
   }
 
   await delay(3000);
+}
+
+/**
+ * Send a document (PDF, DOCX, etc.) from the local filesystem.
+ * Uses the WhatsApp Web attachment menu → Document option.
+ * The file path must be absolute.
+ */
+export async function sendDocument(page: Page, filePath: string, caption?: string): Promise<void> {
+  await clickAttachButton(page);
+
+  // Intercept the file chooser dialog and click the Document option simultaneously.
+  // waitForFileChooser() registers its listener synchronously before the click fires.
+  let uploaded = false;
+
+  try {
+    const [fileChooser] = await Promise.all([
+      page.waitForFileChooser({ timeout: 8000 }),
+      clickMenuOption(page, DOCUMENT_OPTION_ICONS, /documento|document/),
+    ]);
+    await fileChooser.accept([filePath]);
+    uploaded = true;
+  } catch {
+    // Fallback: some WhatsApp Web versions expose a hidden <input type="file"> in the DOM
+    await delay(2000);
+    const fileInput = await page.$('input[type="file"]');
+    if (fileInput) {
+      await fileInput.uploadFile(filePath);
+      uploaded = true;
+    }
+  }
+
+  if (!uploaded) {
+    throw new Error(
+      "No se pudo abrir el selector de archivos. Verifica que WhatsApp Web está activo.",
+    );
+  }
+
+  await typeCaptionAndSend(page, caption);
 }
 
 /**
