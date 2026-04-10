@@ -129,73 +129,18 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
   }
   await delay(1500);
 
-  // ── DEBUG PRE-SEND ──────────────────────────────────────────────
-  await page.screenshot({ path: "wspp-send-debug.png" });
-  const pre = await page.evaluate(() => {
-    const box = document.querySelector('footer [role="textbox"][contenteditable="true"]') as HTMLElement | null;
-    return {
-      boxExists: !!box,
-      boxText: box?.innerText?.slice(0, 60) ?? "",
-      boxIsActive: document.activeElement === box,
-      activeTag: (document.activeElement as HTMLElement)?.tagName ?? "",
-      activeRole: document.activeElement?.getAttribute("role") ?? "",
-    };
-  });
-  console.log("\n[DEBUG pre-send]", JSON.stringify(pre));
-  // ──────────────────────────────────────────────────────────────────
-
-  // Bring page to front, release any held modifiers, then click compose
-  // box with real mouse events before pressing Enter.
+  // The page runs off-screen (--window-position=-2400,-2400). Without bringToFront(),
+  // CDP keyboard events don't fire WhatsApp's send handler. Sequence that works:
+  // 1. bringToFront() — makes the page the active tab so it receives events
+  // 2. keyboard.up('Shift') — release any modifier left from the Shift+Enter loop
+  // 3. page.click() — real mouse event to ensure React's focus state is correct
+  // 4. keyboard.press('Enter') — triggers WhatsApp's send handler
   await page.bringToFront();
   await page.keyboard.up("Shift");
   await delay(100);
-
   await page.click('footer [role="textbox"][contenteditable="true"]');
   await delay(300);
-
-  const postClick = await page.evaluate(() => {
-    const box = document.querySelector('footer [role="textbox"][contenteditable="true"]') as HTMLElement | null;
-    return {
-      boxIsActive: document.activeElement === box,
-      activeTag: (document.activeElement as HTMLElement)?.tagName ?? "",
-    };
-  });
-  console.log("[DEBUG post-click]", JSON.stringify(postClick));
-
   await page.keyboard.press("Enter");
-  await delay(1500);
-
-  const postEnter = await page.evaluate(() => {
-    const box = document.querySelector('footer [role="textbox"][contenteditable="true"]') as HTMLElement | null;
-    return {
-      boxText: box?.innerText?.trim() ?? "",
-      boxCleared: (box?.innerText?.trim().length ?? 0) === 0,
-    };
-  });
-  console.log("[DEBUG post-Enter]", JSON.stringify(postEnter));
-
-  if (postEnter.boxCleared) {
-    console.log("[DEBUG] → Enter funcionó, box vacío = mensaje enviado");
-  } else {
-    console.log("[DEBUG] → Enter NO limpió el box, mensaje NO enviado. Intentando dispatchEvent...");
-    // Last resort: synthetic keydown directly on the compose box
-    await page.evaluate(() => {
-      const box = document.querySelector('footer [role="textbox"][contenteditable="true"]') as HTMLElement | null;
-      if (box) {
-        box.dispatchEvent(new KeyboardEvent("keydown", {
-          key: "Enter", code: "Enter", keyCode: 13, which: 13,
-          bubbles: true, cancelable: true,
-        }));
-      }
-    });
-    await delay(1000);
-    const afterDispatch = await page.evaluate(() => {
-      const box = document.querySelector('footer [role="textbox"][contenteditable="true"]') as HTMLElement | null;
-      return { boxCleared: (box?.innerText?.trim().length ?? 0) === 0 };
-    });
-    console.log("[DEBUG post-dispatch]", JSON.stringify(afterDispatch));
-  }
-  // ── FIN DEBUG ──
 
   await delay(5000);
 
