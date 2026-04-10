@@ -359,35 +359,8 @@ export async function sendDocument(page: Page, filePath: string, caption?: strin
     );
   }
 
-  // Wait for document to upload and the preview modal to render.
+  // Wait for document to upload and the preview screen to render.
   await delay(5000);
-
-  // Debug: capture the preview state so we can inspect what's rendered.
-  await page.screenshot({ path: "wspp-doc-debug.png" });
-
-  // Dump visible icons and buttons to wspp-doc-debug.json for inspection.
-  const debugInfo = await page.evaluate(() => {
-    const icons = Array.from(document.querySelectorAll("span[data-icon]")).map((el) => {
-      const rect = (el as HTMLElement).getBoundingClientRect();
-      return {
-        icon: el.getAttribute("data-icon"),
-        visible: rect.width > 0 && rect.height > 0,
-        top: Math.round(rect.top),
-        left: Math.round(rect.left),
-      };
-    });
-    const btns = Array.from(document.querySelectorAll("button, [role='button']")).map((el) => {
-      const rect = (el as HTMLElement).getBoundingClientRect();
-      return {
-        label: el.getAttribute("aria-label") || el.getAttribute("data-testid") || "",
-        visible: rect.width > 0 && rect.height > 0,
-        top: Math.round(rect.top),
-        left: Math.round(rect.left),
-      };
-    });
-    return { icons, btns };
-  });
-  await Bun.write("wspp-doc-debug.json", JSON.stringify(debugInfo, null, 2));
 
   // Type caption if provided.
   if (caption) {
@@ -421,38 +394,30 @@ export async function sendDocument(page: Page, filePath: string, caption?: strin
     }
   }
 
-  // Send: the preview modal overlay is appended AFTER the footer in the DOM, so
-  // the LAST visible span[data-icon="send"] belongs to the modal, not the footer.
-  const sendResult = await page.evaluate(() => {
-    const allSend = Array.from(document.querySelectorAll('span[data-icon="send"]'));
-    const visible = allSend.filter((el) => {
-      const r = (el as HTMLElement).getBoundingClientRect();
-      return r.width > 0 && r.height > 0;
-    });
+  // Debug confirmed: WhatsApp document preview uses data-icon="wds-ic-send-filled",
+  // not "send". Use page.click() (real mouse events) instead of evaluate-based clicks
+  // which don't fire correctly on this button.
+  const SEND_SELECTORS = [
+    'button[aria-label="Send"]',
+    'button[aria-label="Enviar"]',
+    '[role="button"][aria-label="Send"]',
+    '[role="button"][aria-label="Enviar"]',
+    'span[data-icon="wds-ic-send-filled"]',
+    'span[data-icon="send"]',
+  ];
 
-    if (visible.length > 0) {
-      const icon = visible[visible.length - 1]; // last = modal send button
-      const btn = icon.closest("button") || icon.parentElement;
-      if (btn) {
-        (btn as HTMLElement).click();
-        return `last-visible[${visible.length - 1}/${allSend.length}]`;
-      }
+  let sent = false;
+  for (const sel of SEND_SELECTORS) {
+    try {
+      await page.click(sel, { timeout: 2000 });
+      sent = true;
+      break;
+    } catch {
+      // try next selector
     }
+  }
 
-    // Fallback: visible button with aria-label send/enviar
-    const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
-    for (const btn of allBtns) {
-      const label = (btn.getAttribute("aria-label") || "").toLowerCase();
-      const rect = (btn as HTMLElement).getBoundingClientRect();
-      if ((label === "send" || label === "enviar") && rect.width > 0) {
-        (btn as HTMLElement).click();
-        return `aria:${label}`;
-      }
-    }
-    return null;
-  });
-
-  if (!sendResult) {
+  if (!sent) {
     await page.keyboard.press("Enter");
   }
 
