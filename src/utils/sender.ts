@@ -111,36 +111,48 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
   }
 
   await messageBox.click();
-  await delay(500);
+  await delay(300);
 
-  // Normalize line endings (\r\n on Windows, \r on old Mac) before splitting.
-  // Without this, the \r character gets typed and WhatsApp interprets it as Enter,
-  // splitting one multi-line message into multiple sent messages.
-  const lines = message.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].length > 0) {
-      await page.keyboard.type(lines[i], { delay: 50 });
-    }
-    if (i < lines.length - 1) {
-      await page.keyboard.down('Shift');
-      await page.keyboard.press('Enter');
-      await page.keyboard.up('Shift');
+  // Normalize line endings before inserting.
+  const normalized = message.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Insert text via execCommand('insertText') — this fires the native `input` event
+  // that React's synthetic event system intercepts to update its internal state.
+  // page.keyboard.type() only updates the DOM, leaving React state empty, which
+  // causes WhatsApp to send an empty message (red icon / server rejection).
+  const inserted = await page.evaluate((text: string) => {
+    const box = document.querySelector(
+      'footer [role="textbox"][contenteditable="true"]',
+    ) as HTMLElement | null;
+    if (!box) return false;
+    box.focus();
+    return document.execCommand('insertText', false, text);
+  }, normalized);
+
+  if (!inserted) {
+    // execCommand not supported: fall back to character-by-character typing.
+    const lines = normalized.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].length > 0) {
+        await page.keyboard.type(lines[i], { delay: 80 });
+      }
+      if (i < lines.length - 1) {
+        await page.keyboard.down('Shift');
+        await page.keyboard.press('Enter');
+        await page.keyboard.up('Shift');
+      }
     }
   }
-  await delay(1500);
 
-  // The page runs off-screen (--window-position=-2400,-2400). Without bringToFront(),
-  // CDP keyboard events don't fire WhatsApp's send handler. Sequence that works:
-  // 1. bringToFront() — makes the page the active tab so it receives events
-  // 2. keyboard.up('Shift') — release any modifier left from the Shift+Enter loop
-  // 3. page.click() — real mouse event to ensure React's focus state is correct
-  // 4. keyboard.press('Enter') — triggers WhatsApp's send handler
+  await delay(1000);
+
+  // bringToFront() ensures CDP keyboard events reach the off-screen page.
+  // page.click() sets React focus (not just DOM focus) on the compose box.
   await page.bringToFront();
-  await page.keyboard.up("Shift");
   await delay(100);
   await page.click('footer [role="textbox"][contenteditable="true"]');
   await delay(300);
-  await page.keyboard.press("Enter");
+  await page.keyboard.press('Enter');
 
   await delay(5000);
 
