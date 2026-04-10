@@ -87,117 +87,162 @@ export async function searchAndSelectContact(page: Page, contactName: string): P
 }
 
 export async function typeAndSendMessage(page: Page, message: string): Promise<void> {
-  let messageBox = null;
+  const DEBUG = process.env.WSPP_DEBUG === "1";
+  const dbg = (...args: unknown[]) => { if (DEBUG) console.log("[sender]", ...args); };
 
-  // Prefer the specific WhatsApp compose box
-  messageBox = await page.$('footer [role="textbox"][contenteditable="true"]');
+  // Bring off-screen tab forward so CDP input events reach the page.
+  await page.bringToFront();
+  await delay(200);
 
-  if (!messageBox) {
-    const footer = await page.$('footer');
-    if (footer) {
-      messageBox = await footer.$('[role="textbox"], [contenteditable="true"]');
-    }
-  }
+  const COMPOSE_SEL = 'footer [role="textbox"][contenteditable="true"]';
 
-  if (!messageBox) {
-    const main = await page.$('main');
-    if (main) {
-      messageBox = await main.$('[role="textbox"][contenteditable="true"]');
-    }
-  }
-
-  if (!messageBox) {
+  // Wait for compose box to exist.
+  await page.waitForSelector(COMPOSE_SEL, { timeout: 10000 }).catch(() => {
     throw new Error("No se encontró el cuadro de mensaje.");
-  }
+  });
 
-  await messageBox.click();
+  // Focus the compose box via a real mouse click (fires React focus).
+  await page.click(COMPOSE_SEL);
   await delay(300);
 
-  // Normalize line endings before inserting.
-  const normalized = message.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  // Normalize line endings.
+  const normalized = message.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  dbg("msg length:", normalized.length, "lines:", normalized.split("\n").length);
 
-  // Insert text via execCommand('insertText') — this fires the native `input` event
-  // that React's synthetic event system intercepts to update its internal state.
-  // page.keyboard.type() only updates the DOM, leaving React state empty, which
-  // causes WhatsApp to send an empty message (red icon / server rejection).
-  const inserted = await page.evaluate((text: string) => {
+  // Strategy 1: CDP Input.insertText — the lowest-level text insertion in
+  // Chromium. Fires a real `beforeinput` + `input` event pair that React's
+  // synthetic event system listens to, so WhatsApp's internal state updates
+  // exactly as if the user had typed. Works with multi-line text as a single
+  // atomic insertion (no Enter interpretation).
+  const client = await page.target().createCDPSession();
+  let inserted = false;
+  try {
+    await client.send("Input.insertText", { text: normalized });
+    inserted = true;
+    dbg("CDP Input.insertText: ok");
+  } catch (err) {
+    dbg("CDP Input.insertText failed:", (err as Error).message);
+  }
+
+  // Strategy 2 fallback: execCommand('insertText')
+  if (!inserted) {
+    inserted = await page.evaluate((text: string) => {
+      const box = document.querySelector(
+        'footer [role="textbox"][contenteditable="true"]',
+      ) as HTMLElement | null;
+      if (!box) return false;
+      box.focus();
+      return document.execCommand("insertText", false, text);
+    }, normalized);
+    dbg("execCommand fallback:", inserted);
+  }
+
+  // Strategy 3 fallback: character typing with Shift+Enter for newlines.
+  if (!inserted) {
+    const lines = normalized.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].length > 0) await page.keyboard.type(lines[i], { delay: 60 });
+      if (i < lines.length - 1) {
+        await page.keyboard.down("Shift");
+        await page.keyboard.press("Enter");
+        await page.keyboard.up("Shift");
+      }
+    }
+    dbg("keyboard typing fallback done");
+  }
+
+  await delay(800);
+
+  // Verify the compose box actually has content — if React state is empty
+  // the send button won't appear and Enter would do nothing useful.
+  const boxState = await page.evaluate(() => {
     const box = document.querySelector(
       'footer [role="textbox"][contenteditable="true"]',
     ) as HTMLElement | null;
-    if (!box) return false;
-    box.focus();
-    return document.execCommand('insertText', false, text);
-  }, normalized);
-
-  if (!inserted) {
-    // execCommand not supported: fall back to character-by-character typing.
-    const lines = normalized.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].length > 0) {
-        await page.keyboard.type(lines[i], { delay: 80 });
-      }
-      if (i < lines.length - 1) {
-        await page.keyboard.down('Shift');
-        await page.keyboard.press('Enter');
-        await page.keyboard.up('Shift');
-      }
-    }
-  }
-
-  await delay(1000);
-
-  // bringToFront() ensures CDP keyboard events reach the off-screen page.
-  // page.click() sets React focus (not just DOM focus) on the compose box.
-  await page.bringToFront();
-  await delay(100);
-  await page.click('footer [role="textbox"][contenteditable="true"]');
-  await delay(300);
-  await page.keyboard.press('Enter');
-
-  await delay(5000);
-
-  // Verify message was actually sent (check for error indicator)
-  const sendStatus = await page.evaluate(() => {
-    const outMsgs = document.querySelectorAll('.message-out');
-    if (outMsgs.length === 0) return 'no-messages';
-    const last = outMsgs[outMsgs.length - 1];
-    // Check for error icon (red circle with !)
-    if (last.querySelector('[data-icon="msg-alert-error"], [data-icon="alert-notification"], [data-testid="msg-alert-error"]')) {
-      return 'error';
-    }
-    // Check for pending (clock icon)
-    if (last.querySelector('[data-icon="msg-time"], [data-icon="msg-clock"]')) {
-      return 'pending';
-    }
-    // Check for sent (single check)
-    if (last.querySelector('[data-icon="msg-check"], [data-icon="msg-dblcheck"]')) {
-      return 'sent';
-    }
-    return 'unknown';
+    if (!box) return { present: false, text: "", html: "" };
+    return {
+      present: true,
+      text: (box.innerText || "").trim(),
+      html: box.innerHTML.slice(0, 200),
+    };
   });
+  dbg("compose box after insert:", boxState);
 
-  if (sendStatus === 'error') {
-    throw new Error("El mensaje fue escrito pero WhatsApp no pudo enviarlo. Verifica tu conexión y permisos en el grupo.");
+  if (!boxState.present || boxState.text.length === 0) {
+    throw new Error("El texto no se insertó en el cuadro de mensaje (React state vacío).");
   }
 
-  if (sendStatus === 'pending') {
-    // Wait a bit more for pending messages
+  // Send: prefer clicking the real send button (same pattern as sendDocument),
+  // fall back to Enter. The footer send button replaces the mic icon when text
+  // is present; WhatsApp uses `wds-ic-send-filled` as the data-icon.
+  const SEND_SELECTORS = [
+    'footer button[aria-label="Enviar"]',
+    'footer button[aria-label="Send"]',
+    'footer [role="button"][aria-label="Enviar"]',
+    'footer [role="button"][aria-label="Send"]',
+    'footer span[data-icon="wds-ic-send-filled"]',
+    'footer span[data-icon="send"]',
+  ];
+
+  let clicked = false;
+  for (const sel of SEND_SELECTORS) {
+    try {
+      const handle = await page.waitForSelector(sel, { timeout: 1500, visible: true });
+      if (handle) {
+        await handle.click();
+        dbg("clicked send selector:", sel);
+        clicked = true;
+        break;
+      }
+    } catch {
+      // try next
+    }
+  }
+
+  if (!clicked) {
+    dbg("no send button matched — falling back to Enter");
+    await page.click(COMPOSE_SEL);
+    await delay(200);
+    await page.keyboard.press("Enter");
+  }
+
+  await delay(4000);
+
+  // Verify send status by inspecting the last outgoing message.
+  const sendStatus = await page.evaluate(() => {
+    const outMsgs = document.querySelectorAll(".message-out");
+    if (outMsgs.length === 0) return { state: "no-messages", icons: [] as string[] };
+    const last = outMsgs[outMsgs.length - 1];
+    const icons = Array.from(last.querySelectorAll("[data-icon]"))
+      .map((el) => el.getAttribute("data-icon") || "")
+      .filter(Boolean);
+    if (icons.some((i) => /alert|error/i.test(i))) return { state: "error", icons };
+    if (icons.some((i) => /msg-time|msg-clock/.test(i))) return { state: "pending", icons };
+    if (icons.some((i) => /msg-check|msg-dblcheck/.test(i))) return { state: "sent", icons };
+    return { state: "unknown", icons };
+  });
+  dbg("send status:", sendStatus);
+
+  if (sendStatus.state === "error") {
+    throw new Error(
+      `El mensaje fue escrito pero WhatsApp no pudo enviarlo (iconos: ${sendStatus.icons.join(", ")}). Verifica tu conexión y permisos en el grupo.`,
+    );
+  }
+
+  if (sendStatus.state === "pending") {
     await delay(5000);
-
-    const retryStatus = await page.evaluate(() => {
-      const outMsgs = document.querySelectorAll('.message-out');
-      if (outMsgs.length === 0) return 'no-messages';
+    const retry = await page.evaluate(() => {
+      const outMsgs = document.querySelectorAll(".message-out");
+      if (outMsgs.length === 0) return "no-messages";
       const last = outMsgs[outMsgs.length - 1];
-      if (last.querySelector('[data-icon="msg-alert-error"], [data-icon="alert-notification"], [data-testid="msg-alert-error"]')) {
-        return 'error';
-      }
-      if (last.querySelector('[data-icon="msg-check"], [data-icon="msg-dblcheck"]')) {
-        return 'sent';
-      }
-      return 'pending';
+      const icons = Array.from(last.querySelectorAll("[data-icon]"))
+        .map((el) => el.getAttribute("data-icon") || "");
+      if (icons.some((i) => /alert|error/i.test(i))) return "error";
+      if (icons.some((i) => /msg-check|msg-dblcheck/.test(i))) return "sent";
+      return "pending";
     });
-
-    if (retryStatus === 'error') {
+    dbg("retry status:", retry);
+    if (retry === "error") {
       throw new Error("El mensaje fue escrito pero WhatsApp no pudo enviarlo. Verifica tu conexión y permisos en el grupo.");
     }
   }
