@@ -1,6 +1,6 @@
 # data/
 
-Put your CSV files here for bulk sending.
+Put your files here for bulk sending.
 
 ## Quick start
 
@@ -31,3 +31,22 @@ phone,name,message
 | `*` | no | Any extra column works as `{{variable}}` |
 
 > Your real CSV files (`.csv`) are gitignored — only `.example.csv` is tracked.
+
+## PDF format
+
+```bash
+Coloca tu PDF en data/, por ejemplo data/servicios.pdf, y luego:
+
+# Enviar solo el documento (sin caption)
+bun run wspp "Juan Pérez" --doc servicios.pdf
+
+# Con caption
+bun run wspp "Juan Pérez" "Hola, aquí te envío la info de mis servicios 🎯" --doc servicios.pdf
+
+# Por teléfono
+bun run wspp +51987654321 "Mira este brochure" --doc servicios.pdf
+
+# Masivo (mismo doc a varios)
+bun run wspp "Juan,María,Carlos" "Oferta especial para ti" --doc servicios.pdf
+
+```
