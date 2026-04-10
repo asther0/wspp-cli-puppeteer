@@ -129,20 +129,30 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
   }
   await delay(1500);
 
-  // Try clicking the send button (more reliable for community groups)
-  const clickedSend = await page.evaluate(() => {
-    const sendIcon = document.querySelector('span[data-icon="send"]');
-    if (sendIcon) {
-      const btn = sendIcon.closest('button') || sendIcon.parentElement;
-      if (btn) {
-        (btn as HTMLElement).click();
-        return true;
-      }
-    }
-    return false;
-  });
+  // Use page.click() (real mouse events) — evaluate-based element.click() does not
+  // fire React's synthetic event listeners on WhatsApp's send button, so the message
+  // stays in the compose box even though clickedSend returns true.
+  const SEND_SELECTORS = [
+    'button[aria-label="Send"]',
+    'button[aria-label="Enviar"]',
+    '[role="button"][aria-label="Send"]',
+    '[role="button"][aria-label="Enviar"]',
+    'span[data-icon="wds-ic-send-filled"]',
+    'span[data-icon="send"]',
+  ];
 
-  if (!clickedSend) {
+  let sent = false;
+  for (const sel of SEND_SELECTORS) {
+    try {
+      await page.click(sel, { timeout: 2000 });
+      sent = true;
+      break;
+    } catch {
+      // try next selector
+    }
+  }
+
+  if (!sent) {
     await page.keyboard.press("Enter");
   }
 
