@@ -360,21 +360,42 @@ export async function sendDocument(page: Page, filePath: string, caption?: strin
   }
 
   // Wait for document to upload and the preview modal to render.
-  // Documents can take longer than images depending on file size.
   await delay(5000);
 
-  // Type caption in the document preview modal if provided.
+  // Debug: capture the preview state so we can inspect what's rendered.
+  await page.screenshot({ path: "wspp-doc-debug.png" });
+
+  // Dump visible icons and buttons to wspp-doc-debug.json for inspection.
+  const debugInfo = await page.evaluate(() => {
+    const icons = Array.from(document.querySelectorAll("span[data-icon]")).map((el) => {
+      const rect = (el as HTMLElement).getBoundingClientRect();
+      return {
+        icon: el.getAttribute("data-icon"),
+        visible: rect.width > 0 && rect.height > 0,
+        top: Math.round(rect.top),
+        left: Math.round(rect.left),
+      };
+    });
+    const btns = Array.from(document.querySelectorAll("button, [role='button']")).map((el) => {
+      const rect = (el as HTMLElement).getBoundingClientRect();
+      return {
+        label: el.getAttribute("aria-label") || el.getAttribute("data-testid") || "",
+        visible: rect.width > 0 && rect.height > 0,
+        top: Math.round(rect.top),
+        left: Math.round(rect.left),
+      };
+    });
+    return { icons, btns };
+  });
+  await Bun.write("wspp-doc-debug.json", JSON.stringify(debugInfo, null, 2));
+
+  // Type caption if provided.
   if (caption) {
     const captionFocused = await page.evaluate(() => {
-      // Priority 1: known data-testid for media caption input
       const known = document.querySelector(
         '[data-testid="media-caption-input-container"] [role="textbox"]',
       );
-      if (known) {
-        (known as HTMLElement).click();
-        return true;
-      }
-      // Priority 2: any contenteditable textbox outside the footer and sidebar
+      if (known) { (known as HTMLElement).click(); return true; }
       const boxes = document.querySelectorAll('[role="textbox"][contenteditable="true"]');
       for (const box of boxes) {
         if (!box.closest("footer") && !box.closest("#side")) {
@@ -389,9 +410,7 @@ export async function sendDocument(page: Page, filePath: string, caption?: strin
       await delay(300);
       const lines = caption.split("\n");
       for (let i = 0; i < lines.length; i++) {
-        if (lines[i].length > 0) {
-          await page.keyboard.type(lines[i], { delay: 50 });
-        }
+        if (lines[i].length > 0) await page.keyboard.type(lines[i], { delay: 50 });
         if (i < lines.length - 1) {
           await page.keyboard.down("Shift");
           await page.keyboard.press("Enter");
@@ -402,32 +421,38 @@ export async function sendDocument(page: Page, filePath: string, caption?: strin
     }
   }
 
-  // Send the document. Try the send icon in the preview modal first, then Enter.
-  const sent = await page.evaluate(() => {
-    for (const iconName of ["send", "send-white"]) {
-      const icon = document.querySelector(`span[data-icon="${iconName}"]`);
-      if (icon) {
-        const btn = icon.closest("button") || (icon.parentElement as HTMLElement | null);
-        if (btn) {
-          (btn as HTMLElement).click();
-          return iconName;
-        }
+  // Send: the preview modal overlay is appended AFTER the footer in the DOM, so
+  // the LAST visible span[data-icon="send"] belongs to the modal, not the footer.
+  const sendResult = await page.evaluate(() => {
+    const allSend = Array.from(document.querySelectorAll('span[data-icon="send"]'));
+    const visible = allSend.filter((el) => {
+      const r = (el as HTMLElement).getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+
+    if (visible.length > 0) {
+      const icon = visible[visible.length - 1]; // last = modal send button
+      const btn = icon.closest("button") || icon.parentElement;
+      if (btn) {
+        (btn as HTMLElement).click();
+        return `last-visible[${visible.length - 1}/${allSend.length}]`;
       }
     }
-    // Fallback: button with aria-label send/enviar
-    const btns = document.querySelectorAll('button, [role="button"]');
-    for (const btn of btns) {
+
+    // Fallback: visible button with aria-label send/enviar
+    const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
+    for (const btn of allBtns) {
       const label = (btn.getAttribute("aria-label") || "").toLowerCase();
-      if (label === "send" || label === "enviar") {
+      const rect = (btn as HTMLElement).getBoundingClientRect();
+      if ((label === "send" || label === "enviar") && rect.width > 0) {
         (btn as HTMLElement).click();
-        return "aria";
+        return `aria:${label}`;
       }
     }
     return null;
   });
 
-  if (!sent) {
-    // Last resort: Enter key works in WhatsApp Web document preview
+  if (!sendResult) {
     await page.keyboard.press("Enter");
   }
 
