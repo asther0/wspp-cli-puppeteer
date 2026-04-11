@@ -17,6 +17,7 @@ Built with Puppeteer + Bun. No APIs, no tokens — just browser automation.
 - Anti-ban: random delays (3–7s) + volume warnings
 - Persistent session — scan QR once, reuse forever
 - Background mode — no visible browser window
+- **API server mode** — expose a REST API so n8n, Make, Zapier, or any script can send messages via HTTP
 
 ## Requirements
 
@@ -265,6 +266,166 @@ Opens a visible Chrome window. Scan the QR code with your phone. Session is save
 | `bun run wspp 3 "msg" --at 08:00` | Scheduled send |
 | `bun run wspp:i` | Interactive mode |
 | `bun run wspp:debug-icons` | Debug WhatsApp selectors |
+| `bun run wspp:serve` | Start REST API server (open mode) |
+| `bun run wspp:serve --port 3000 --key <key>` | Start REST API server with auth |
+
+## API Server Mode
+
+Turn wspp-cli into a self-hosted WhatsApp sending provider — like Twilio or Kapso, but free and using your own number.
+
+Start the server:
+
+```bash
+# With API key (recommended)
+bun run wspp:serve --port 3000 --key my-secret-key
+
+# Using environment variables
+WSPP_API_KEY=my-secret-key WSPP_PORT=3000 bun run wspp:serve
+
+# Open mode (no auth — dev only)
+bun run wspp:serve
+```
+
+The browser starts in the background and WhatsApp Web connects automatically using your saved session.
+
+### Endpoints
+
+#### `POST /send` — Send a single message
+
+```bash
+curl -X POST http://localhost:3000/send \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: my-secret-key" \
+  -d '{
+    "to": "+51987654321",
+    "message": "Hola {{name}}, tu pedido está listo!",
+    "vars": { "name": "Carlos" }
+  }'
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `to` | string | ✅ | Contact name or `+phone` |
+| `message` | string | ✅ | Text (supports `{{variables}}`) |
+| `vars` | object | — | Values for template variables |
+
+Response:
+```json
+{ "ok": true, "to": "+51987654321", "message": "Hola Carlos, tu pedido está listo!", "sentAt": "2025-01-15T14:30:00.000Z" }
+```
+
+---
+
+#### `POST /send/bulk` — Send to multiple recipients
+
+```bash
+curl -X POST http://localhost:3000/send/bulk \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: my-secret-key" \
+  -d '{
+    "targets": ["+51987654321", "+56912345678", "Juan"],
+    "message": "Hola {{name}}, reunión a las 3pm",
+    "vars": { "name": "equipo" }
+  }'
+```
+
+Anti-ban random delays (3–7s) are applied automatically between each message.
+
+Response:
+```json
+{ "ok": true, "sent": 3, "failed": [], "total": 3 }
+```
+
+---
+
+#### `GET /contacts` — List recent contacts
+
+```bash
+curl http://localhost:3000/contacts \
+  -H "X-API-Key: my-secret-key"
+```
+
+---
+
+#### `GET /health` — Server status (no auth required)
+
+```bash
+curl http://localhost:3000/health
+```
+
+```json
+{
+  "ok": true,
+  "status": "ready",
+  "session": true,
+  "uptime": 3600,
+  "stats": { "sent": 47, "errors": 0 }
+}
+```
+
+---
+
+### Integrations
+
+#### n8n — HTTP Request node
+
+```
+Method:  POST
+URL:     http://localhost:3000/send
+Headers: X-API-Key = my-secret-key
+Body:    { "to": "{{ $json.phone }}", "message": "Hola {{ $json.name }}, bienvenido!" }
+```
+
+Connect any trigger (Google Sheets, Typeform, Webhooks) to the HTTP Request node and messages fly automatically.
+
+#### Make (Integromat)
+
+Use the **HTTP → Make a request** module with the same config as above.
+
+#### Google Sheets + Apps Script
+
+```javascript
+function onFormSubmit(e) {
+  const phone = e.values[2];
+  const name  = e.values[1];
+
+  UrlFetchApp.fetch("http://YOUR_SERVER:3000/send", {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({ to: phone, message: `Hola ${name}, recibimos tu solicitud!` }),
+    headers: { "X-API-Key": "my-secret-key" },
+  });
+}
+```
+
+#### Shell script / CI pipeline
+
+```bash
+# Notify on deploy
+npm run deploy && curl -s -X POST http://localhost:3000/send \
+  -H "X-API-Key: $WSPP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"to": "Dev Team", "message": "✅ Deploy a prod completado"}'
+
+# Cron report every 5 minutes
+*/5 * * * * curl -s -X POST http://localhost:3000/send \
+  -H "X-API-Key: $WSPP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"to": "Managers", "message": "📊 Reporte 5min: todo OK"}'
+```
+
+---
+
+### Running on a VPS
+
+1. Login locally first: `bun run wspp:login` (saves `.wspp-session/`)
+2. Copy `.wspp-session/` to your VPS
+3. Start the server: `WSPP_API_KEY=my-key bun run wspp:serve --port 3000`
+4. Point n8n/Make to your VPS IP
+
+> **Note**: WhatsApp Web only supports one active session per account. The server and your phone can be active simultaneously, but two servers on the same account will conflict.
+
+---
 
 ## How It Works
 
