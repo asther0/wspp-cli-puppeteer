@@ -377,7 +377,7 @@ export async function sendMessageByPhone(page: Page, phone: string, message: str
         if (el) {
           const dialog = el.closest('[role="dialog"]') || el.parentElement;
           const text = (dialog?.textContent || "").toLowerCase();
-          if (/invalid|inválid|no válido|no existe|phone number shared/i.test(text)) {
+          if (/invalid|inválid|no válido|no existe|phone number shared|isn't on whatsapp|not on whatsapp|no está en whatsapp|número no existe/i.test(text)) {
             hasInvalid = true;
             break;
           }
@@ -399,7 +399,19 @@ export async function sendMessageByPhone(page: Page, phone: string, message: str
   }
 
   if (state === "invalid") {
-    throw new Error(`Número inválido: ${phone}. Verifica el código de país.`);
+    // Dismiss the popup so the browser stays in a clean state for the next request.
+    try {
+      await page.evaluate((sels: string[]) => {
+        for (const sel of sels) {
+          const btn = document.querySelector(sel) as HTMLElement | null;
+          if (btn) { btn.click(); return; }
+        }
+      }, INVALID_POPUP_SELECTORS);
+      await delay(500);
+      // Navigate back to main screen after dismissing
+      await page.goto("https://web.whatsapp.com", { waitUntil: "networkidle2" }).catch(() => {});
+    } catch { /* ignore cleanup errors */ }
+    throw new Error(`Número inválido o no registrado en WhatsApp: ${phone}`);
   }
 
   if (state === "timeout") {

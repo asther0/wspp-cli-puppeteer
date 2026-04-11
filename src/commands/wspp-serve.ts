@@ -250,6 +250,10 @@ async function router(req: Request): Promise<Response> {
   } catch (err: any) {
     totalErrors++;
     console.error(chalk.red(`  ✖ ${method} ${pathname}`), err.message);
+    // Navigate back to home to reset browser state for next request
+    enqueue(async () => {
+      try { await page!.goto("https://web.whatsapp.com", { waitUntil: "networkidle2" }); } catch {}
+    });
     return json({ ok: false, error: err.message }, 500);
   }
 }
