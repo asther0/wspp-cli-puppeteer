@@ -354,34 +354,77 @@ export async function sendMessageByPhone(page: Page, phone: string, message: str
   await page.goto(`https://web.whatsapp.com/send?phone=${phoneNumber}`, {
     waitUntil: "networkidle2",
   });
-  await delay(5000);
 
-  // WhatsApp may show an invalid number popup
-  const invalid = await page.evaluate(() => {
-    const popup = document.querySelector('[data-testid="popup-controls-ok"]');
-    if (popup) {
-      (popup as HTMLElement).click();
-      return true;
-    }
-    return false;
-  });
+  const DEBUG = process.env.WSPP_DEBUG === "1";
+  const dbg = (...args: unknown[]) => { if (DEBUG) console.log("[sendByPhone]", ...args); };
 
-  if (invalid) {
+  // Poll for one of three terminal states: compose box (success), invalid
+  // popup (bad number), or timeout. WhatsApp's chat load can take 5-25s on
+  // cold starts — the old fixed 5s delay was too short for some numbers.
+  const COMPOSE_SEL = 'footer [role="textbox"][contenteditable="true"]';
+  const INVALID_POPUP_SELECTORS = [
+    '[data-testid="popup-controls-ok"]',
+    'div[role="dialog"] button',
+  ];
+
+  const MAX_WAIT_MS = 25000;
+  const POLL_MS = 500;
+  const startedAt = Date.now();
+  let state: "compose" | "invalid" | "timeout" = "timeout";
+
+  while (Date.now() - startedAt < MAX_WAIT_MS) {
+    const snapshot = await page.evaluate((composeSelArg: string, popupSelsArg: string[]) => {
+      const compose = document.querySelector(composeSelArg);
+      const hasCompose = !!compose;
+
+      // Invalid-number popup: check by text content (multilingual) + testids.
+      let hasInvalid = false;
+      for (const sel of popupSelsArg) {
+        const el = document.querySelector(sel);
+        if (el) {
+          const dialog = el.closest('[role="dialog"]') || el.parentElement;
+          const text = (dialog?.textContent || "").toLowerCase();
+          if (/invalid|inválid|no válido|no existe|phone number shared/i.test(text)) {
+            hasInvalid = true;
+            break;
+          }
+        }
+      }
+
+      // Loading indicators (progress bar, spinner)
+      const loading = !!document.querySelector(
+        'progress, [data-testid="chat-loading"], [aria-busy="true"]',
+      );
+
+      return { hasCompose, hasInvalid, loading, url: location.href };
+    }, COMPOSE_SEL, INVALID_POPUP_SELECTORS);
+
+    if (snapshot.hasCompose) { state = "compose"; break; }
+    if (snapshot.hasInvalid) { state = "invalid"; break; }
+    dbg(`polling... loading=${snapshot.loading} elapsed=${Date.now() - startedAt}ms`);
+    await delay(POLL_MS);
+  }
+
+  if (state === "invalid") {
     throw new Error(`Número inválido: ${phone}. Verifica el código de país.`);
   }
 
-  // Verify message box appeared
-  const hasMessageBox = await page.evaluate(() => {
-    const footer = document.querySelector('footer');
-    if (footer) {
-      const box = footer.querySelector('[role="textbox"], [contenteditable="true"]');
-      if (box) return true;
-    }
-    return false;
-  });
+  if (state === "timeout") {
+    // Capture diagnostics on failure so we can see why the chat never opened.
+    try {
+      const diag = await page.evaluate(() => ({
+        url: location.href,
+        title: document.title,
+        bodyText: (document.body.innerText || "").slice(0, 300),
+        hasFooter: !!document.querySelector("footer"),
+        hasMain: !!document.querySelector("main"),
+        dialogText: (document.querySelector('[role="dialog"]')?.textContent || "").slice(0, 200),
+      }));
+      console.log("[sendByPhone] diagnostics:", JSON.stringify(diag, null, 2));
+      await page.screenshot({ path: `wspp-debug-phone-${phoneNumber}.png` }).catch(() => {});
+    } catch { /* page may be in a bad state */ }
 
-  if (!hasMessageBox) {
-    throw new Error(`No se pudo abrir chat con ${phone}. Verifica el número.`);
+    throw new Error(`No se pudo abrir chat con ${phone} tras ${MAX_WAIT_MS / 1000}s. Verifica el número o la conexión.`);
   }
 
   await typeAndSendMessage(page, message);
