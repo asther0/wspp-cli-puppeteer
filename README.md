@@ -106,7 +106,50 @@ phone,name,message
 
 See [Anti-ban tips](#anti-ban-tips) before sending to large lists.
 
-### 4. Schedule a message for later
+### 4. Send a document (PDF, DOCX, etc.)
+
+Attach and send any file to a contact or group. The file can optionally include a caption.
+
+```bash
+# File in data/ folder (searched automatically)
+bun run wspp "Chema" --doc servicios.pdf
+
+# File with caption
+bun run wspp "Chema" "Here's the proposal!" --doc propuesta.pdf
+
+# Full path
+bun run wspp "Team" --doc /Users/me/docs/report.pdf
+```
+
+The browser opens in visible mode so the file chooser works. After the file uploads and the preview appears, the document is sent automatically.
+
+### 5. Send a long message from a `.txt` file
+
+For multi-paragraph messages, templates, or content with line breaks — write it in a `.txt` file and reference it from the CLI.
+
+```bash
+# File in data/ folder
+bun run wspp "Chema" --file data/mensaje.txt
+
+# Combined with CSV bulk send (personalized template)
+bun run wspp --csv data/contactos.csv --file data/plantilla.txt
+```
+
+**`data/plantilla.txt`:**
+```
+Hola {{name}},
+
+Este es un recordatorio de tu cita.
+
+Saludos,
+El equipo
+```
+
+- Line breaks are preserved exactly as written
+- `{{name}}` and any CSV column can be used as template variables when combined with `--csv`
+- The entire `.txt` is sent as a **single message**
+
+### 7. Schedule a message for later
 
 Send birthday wishes, reminders, or timed notifications.
 
@@ -120,7 +163,7 @@ bun run wspp "Team Lead" "Daily standup reminder" --at 09:00
 
 Shows a real-time countdown in the terminal until the message is sent.
 
-### 5. Send a poll (groups only)
+### 8. Send a poll (groups only)
 
 Create quick surveys in group chats.
 
@@ -134,7 +177,7 @@ bun run wspp "Friends" --poll "Movie night?" "Friday,Saturday,Sunday,Skip"
 
 Works in regular groups and community groups. Polls are not supported in individual chats.
 
-### 6. Take a photo with camera
+### 9. Take a photo with camera
 
 Capture and send a live photo directly from the CLI.
 
@@ -154,7 +197,7 @@ bun run wspp "Chema" --camera --timer 0
 
 Shows a visual countdown both in the terminal and on the browser page. Camera always opens in visible mode (not background).
 
-### 7. Browse and search contacts
+### 10. Browse and search contacts
 
 ```bash
 # List your 10 most recent chats
@@ -176,7 +219,7 @@ Output:
 ╚══════╩════════════════════════════╝
 ```
 
-### 8. Interactive mode (full menu)
+### 11. Interactive mode (full menu)
 
 For when you want to browse, select, and send without memorizing commands.
 
@@ -191,7 +234,7 @@ Features:
 - Confirmation before sending
 - Stays open for multiple actions
 
-### 9. First-time setup
+### 12. First-time setup
 
 ```bash
 bun run wspp:login
@@ -208,11 +251,14 @@ Opens a visible Chrome window. Scan the QR code with your phone. Session is save
 | `bun run wspp:contacts "name"` | Search contacts |
 | `bun run wspp "Name" "msg"` | Send by name |
 | `bun run wspp 3 "msg"` | Send by position |
-| `bun run wspp +51987654321 "msg"` | Send by phone number |
-| `bun run wspp 1,3,5 "msg"` | Bulk send |
+| `bun run wspp "+51987654321" "msg"` | Send by phone number |
+| `bun run wspp 1,3,5 "msg"` | Bulk send by position |
 | `bun run wspp --csv data/file.csv "msg"` | Bulk send from CSV |
-| `bun run wspp --csv data/file.csv --dry-run "msg"` | Preview CSV (no send) |
-| `bun run wspp 3 --file msg.txt` | Send from text file |
+| `bun run wspp --csv data/file.csv --file data/t.txt` | CSV bulk with `.txt` template |
+| `bun run wspp --csv data/file.csv --dry-run "msg"` | Preview CSV send (no messages sent) |
+| `bun run wspp 3 --file data/msg.txt` | Send from `.txt` file |
+| `bun run wspp "Name" --doc archivo.pdf` | Send a document |
+| `bun run wspp "Name" "Caption" --doc archivo.pdf` | Document with caption |
 | `bun run wspp "Group" --poll "Q?" "a,b,c"` | Send poll (groups only) |
 | `bun run wspp 3 --camera` | Camera photo (3s timer) |
 | `bun run wspp 3 --camera --timer 5` | Camera with custom timer |
@@ -226,12 +272,32 @@ Opens a visible Chrome window. Scan the QR code with your phone. Session is save
 2. **Session**: Chrome's user data directory is saved in `.wspp-session/`
 3. **Background**: On subsequent runs, Chrome opens off-screen (position -2400,-2400)
 4. **Contacts**: Extracts chat names from the WhatsApp sidebar DOM
-5. **Send**: Searches contact, selects chat, types message, presses Enter
+5. **Send**: Searches contact, selects chat, inserts text via CDP `Input.insertText` (syncs React state), clicks the real send button
 6. **Bulk**: Iterates contacts with random 3–7s delays (anti rate-limit)
-7. **CSV**: Parses `data/*.csv`, renders `{{templates}}`, sends via bulk pipeline
-8. **Poll**: Opens attach menu → Poll → fills question/options → submits
-9. **Camera**: Opens attach menu → Camera → countdown timer → capture → send
-10. **Schedule**: Keeps browser open with countdown, sends at target time
+7. **CSV**: Parses `data/*.csv`, renders `{{templates}}`, sends via bulk pipeline; each contact navigated via `/send?phone=` with automatic `beforeunload` handling
+8. **File**: Reads `.txt` from `data/`, normalizes line endings, sends as a single message preserving all line breaks
+9. **Document**: Opens attach menu → Document → intercepts file chooser → uploads → sends with optional caption
+10. **Poll**: Opens attach menu → Poll → fills question/options → submits
+11. **Camera**: Opens attach menu → Camera → countdown timer → capture → send
+12. **Schedule**: Keeps browser open with countdown, sends at target time
+
+## Debugging
+
+If a message is failing silently, set `WSPP_DEBUG=1` to print step-by-step logs:
+
+```bash
+WSPP_DEBUG=1 bun run wspp "Chema" --file data/mensaje.txt
+```
+
+Debug output includes:
+- Message length and line count
+- Which text insertion strategy was used (CDP / execCommand / keyboard)
+- The compose box `innerText` after insertion
+- Which send button selector matched
+- All `data-icon` values found on the last sent message
+- Time taken for send confirmation
+
+For navigation failures in CSV bulk sends, on timeout a screenshot is automatically saved as `wspp-debug-phone-<number>.png` in the project root.
 
 ## Configuration
 

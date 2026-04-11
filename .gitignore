@@ -30,5 +30,16 @@ Thumbs.db
 # Screenshots (generated at runtime)
 *.png
 
+# Debug artifacts (generated at runtime)
+wspp-*.json
+
+# Documents and user data (may contain private info)
+*.pdf
+data/*.csv
+!data/contactos.example.csv
+data/*.txt
+!data/mensaje.example.txt
+!data/reminder.example.txt
+
 # WhatsApp session data
 .wspp-session/
