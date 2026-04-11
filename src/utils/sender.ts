@@ -332,6 +332,24 @@ export async function sendMessageByPhone(page: Page, phone: string, message: str
   const digits = phone.replace(/[\s\-()]/g, '');
   const phoneNumber = digits.startsWith('+') ? digits.slice(1) : digits;
 
+  // WhatsApp Web attaches a beforeunload handler that triggers a native
+  // "leave site?" dialog when page.goto navigates away — this blocks
+  // bulk sends after the first contact. Auto-accept any dialog (register
+  // only once per page to avoid duplicate listeners across iterations).
+  const pageWithFlag = page as unknown as { __dialogHandlerRegistered?: boolean };
+  if (!pageWithFlag.__dialogHandlerRegistered) {
+    page.on("dialog", async (dialog) => {
+      try { await dialog.accept(); } catch { /* dialog may already be handled */ }
+    });
+    pageWithFlag.__dialogHandlerRegistered = true;
+  }
+
+  // Neutralize onbeforeunload so the dialog doesn't even fire in the first
+  // place (belt + suspenders with the dialog handler above).
+  await page.evaluate(() => {
+    window.onbeforeunload = null;
+  }).catch(() => { /* page may be mid-navigation */ });
+
   // Use WhatsApp's direct chat URL — opens the chat without searching
   await page.goto(`https://web.whatsapp.com/send?phone=${phoneNumber}`, {
     waitUntil: "networkidle2",
