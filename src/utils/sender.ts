@@ -92,7 +92,7 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
 
   // Bring off-screen tab forward so CDP input events reach the page.
   await page.bringToFront();
-  await delay(200);
+  await delay(150);
 
   const COMPOSE_SEL = 'footer [role="textbox"][contenteditable="true"]';
 
@@ -103,7 +103,7 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
 
   // Focus the compose box via a real mouse click (fires React focus).
   await page.click(COMPOSE_SEL);
-  await delay(300);
+  await delay(150);
 
   // Normalize line endings.
   const normalized = message.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
@@ -151,7 +151,7 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
     dbg("keyboard typing fallback done");
   }
 
-  await delay(800);
+  await delay(300);
 
   // Verify the compose box actually has content — if React state is empty
   // the send button won't appear and Enter would do nothing useful.
@@ -202,50 +202,43 @@ export async function typeAndSendMessage(page: Page, message: string): Promise<v
   if (!clicked) {
     dbg("no send button matched — falling back to Enter");
     await page.click(COMPOSE_SEL);
-    await delay(200);
+    await delay(150);
     await page.keyboard.press("Enter");
   }
 
-  await delay(4000);
+  // Poll for send confirmation instead of a fixed delay. Check every 300ms
+  // until the last .message-out shows a sent icon, an error, or we exceed
+  // the timeout. Most messages confirm within 500-1500ms.
+  const SEND_TIMEOUT_MS = 6000;
+  const SEND_POLL_MS = 300;
+  const sendStart = Date.now();
+  let sendStatus: { state: string; icons: string[] } = { state: "unknown", icons: [] };
 
-  // Verify send status by inspecting the last outgoing message.
-  const sendStatus = await page.evaluate(() => {
-    const outMsgs = document.querySelectorAll(".message-out");
-    if (outMsgs.length === 0) return { state: "no-messages", icons: [] as string[] };
-    const last = outMsgs[outMsgs.length - 1];
-    const icons = Array.from(last.querySelectorAll("[data-icon]"))
-      .map((el) => el.getAttribute("data-icon") || "")
-      .filter(Boolean);
-    if (icons.some((i) => /alert|error/i.test(i))) return { state: "error", icons };
-    if (icons.some((i) => /msg-time|msg-clock/.test(i))) return { state: "pending", icons };
-    if (icons.some((i) => /msg-check|msg-dblcheck/.test(i))) return { state: "sent", icons };
-    return { state: "unknown", icons };
-  });
-  dbg("send status:", sendStatus);
+  while (Date.now() - sendStart < SEND_TIMEOUT_MS) {
+    sendStatus = await page.evaluate(() => {
+      const outMsgs = document.querySelectorAll(".message-out");
+      if (outMsgs.length === 0) return { state: "no-messages", icons: [] as string[] };
+      const last = outMsgs[outMsgs.length - 1];
+      const icons = Array.from(last.querySelectorAll("[data-icon]"))
+        .map((el) => el.getAttribute("data-icon") || "")
+        .filter(Boolean);
+      if (icons.some((i) => /alert|error/i.test(i))) return { state: "error", icons };
+      if (icons.some((i) => /msg-check|msg-dblcheck/.test(i))) return { state: "sent", icons };
+      if (icons.some((i) => /msg-time|msg-clock/.test(i))) return { state: "pending", icons };
+      return { state: "unknown", icons };
+    });
+
+    if (sendStatus.state === "sent" || sendStatus.state === "error") break;
+    await delay(SEND_POLL_MS);
+  }
+  dbg("final send status:", sendStatus, "elapsed:", Date.now() - sendStart, "ms");
 
   if (sendStatus.state === "error") {
     throw new Error(
       `El mensaje fue escrito pero WhatsApp no pudo enviarlo (iconos: ${sendStatus.icons.join(", ")}). Verifica tu conexión y permisos en el grupo.`,
     );
   }
-
-  if (sendStatus.state === "pending") {
-    await delay(5000);
-    const retry = await page.evaluate(() => {
-      const outMsgs = document.querySelectorAll(".message-out");
-      if (outMsgs.length === 0) return "no-messages";
-      const last = outMsgs[outMsgs.length - 1];
-      const icons = Array.from(last.querySelectorAll("[data-icon]"))
-        .map((el) => el.getAttribute("data-icon") || "");
-      if (icons.some((i) => /alert|error/i.test(i))) return "error";
-      if (icons.some((i) => /msg-check|msg-dblcheck/.test(i))) return "sent";
-      return "pending";
-    });
-    dbg("retry status:", retry);
-    if (retry === "error") {
-      throw new Error("El mensaje fue escrito pero WhatsApp no pudo enviarlo. Verifica tu conexión y permisos en el grupo.");
-    }
-  }
+  // "pending" or "unknown" at timeout: don't block the bulk — log and continue.
 }
 
 export async function selectContactByPosition(page: Page, position: number): Promise<void> {
