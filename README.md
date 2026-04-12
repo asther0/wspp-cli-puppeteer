@@ -1,8 +1,34 @@
 # WSPP-CLI
 
-WhatsApp Web automation from your terminal. Send messages, list contacts, bulk send, schedule — all from the command line.
+WhatsApp Web automation from your terminal. Send messages, bulk send from CSV, schedule, and expose a REST API for webhooks — all powered by browser automation, no official API needed.
 
-Built with Puppeteer + Bun. No APIs, no tokens — just browser automation.
+Built with Puppeteer + Bun. No tokens, no monthly fees — just your own WhatsApp number.
+
+## Install
+
+Requires [Bun](https://bun.sh) and Google Chrome.
+
+```bash
+# Install globally
+npm install -g wspp-cli
+
+# Or with bun
+bun install -g wspp-cli
+
+# First-time setup — scan QR once
+wspp-login
+```
+
+After scanning the QR, the session is saved. All subsequent commands run silently in the background.
+
+### From source
+
+```bash
+git clone https://github.com/asther0/wspp-cli-puppeteer.git
+cd wspp-cli-puppeteer
+bun install
+bun run wspp:login
+```
 
 ## Features
 
@@ -21,29 +47,32 @@ Built with Puppeteer + Bun. No APIs, no tokens — just browser automation.
 
 ## Requirements
 
-- [Bun](https://bun.sh) >= 1.0
+- [Bun](https://bun.sh) >= 1.0 — install with `curl -fsSL https://bun.sh/install | bash`
 - Google Chrome installed
-- Windows (Chrome path configurable in `src/constants.ts`)
-
-## Install
-
-```bash
-git clone https://github.com/asther0/wspp-cli-puppeteer.git
-cd wspp-cli-puppeteer
-bun install
-```
+- Chrome path is auto-configured for Windows. For Mac/Linux, update `src/constants.ts`:
+  ```typescript
+  // Mac
+  export const CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+  // Linux
+  export const CHROME_PATH = "/usr/bin/google-chrome";
+  ```
 
 ## Quick Start
 
 ```bash
-# 1. Login — opens browser to scan QR (only once)
-bun run wspp:login
+# 1. Install
+npm install -g wspp-cli
 
-# 2. See your recent contacts
-bun run wspp:contacts
+# 2. Login — scan QR once
+wspp-login
 
-# 3. Send a message by position
-bun run wspp 3 "Hello from CLI!"
+# 3. See your recent contacts
+wspp-contacts
+
+# 4. Send a message
+wspp "Carlos" "Hello from CLI!"
+wspp 3 "Hello from CLI!"        # by position
+wspp "+51987654321" "Hello!"    # by phone
 ```
 
 After scanning the QR the first time, all subsequent commands run in the background — no browser window visible.
@@ -245,29 +274,28 @@ Opens a visible Chrome window. Scan the QR code with your phone. Session is save
 
 ## All Commands
 
-| Command | Description |
-|---|---|
-| `bun run wspp:login` | First-time QR login |
-| `bun run wspp:contacts` | List recent contacts |
-| `bun run wspp:contacts "name"` | Search contacts |
-| `bun run wspp "Name" "msg"` | Send by name |
-| `bun run wspp 3 "msg"` | Send by position |
-| `bun run wspp "+51987654321" "msg"` | Send by phone number |
-| `bun run wspp 1,3,5 "msg"` | Bulk send by position |
-| `bun run wspp --csv data/file.csv "msg"` | Bulk send from CSV |
-| `bun run wspp --csv data/file.csv --file data/t.txt` | CSV bulk with `.txt` template |
-| `bun run wspp --csv data/file.csv --dry-run "msg"` | Preview CSV send (no messages sent) |
-| `bun run wspp 3 --file data/msg.txt` | Send from `.txt` file |
-| `bun run wspp "Name" --doc archivo.pdf` | Send a document |
-| `bun run wspp "Name" "Caption" --doc archivo.pdf` | Document with caption |
-| `bun run wspp "Group" --poll "Q?" "a,b,c"` | Send poll (groups only) |
-| `bun run wspp 3 --camera` | Camera photo (3s timer) |
-| `bun run wspp 3 --camera --timer 5` | Camera with custom timer |
-| `bun run wspp 3 "msg" --at 08:00` | Scheduled send |
-| `bun run wspp:i` | Interactive mode |
-| `bun run wspp:debug-icons` | Debug WhatsApp selectors |
-| `bun run wspp:serve` | Start REST API server (open mode) |
-| `bun run wspp:serve --port 3000 --key <key>` | Start REST API server with auth |
+Commands work both as global installs (`wspp ...`) and from source (`bun run wspp ...`).
+
+| Global install | From source | Description |
+|---|---|---|
+| `wspp-login` | `bun run wspp:login` | First-time QR login |
+| `wspp-contacts` | `bun run wspp:contacts` | List recent contacts |
+| `wspp-contacts "name"` | `bun run wspp:contacts "name"` | Search contacts |
+| `wspp "Name" "msg"` | `bun run wspp "Name" "msg"` | Send by name |
+| `wspp 3 "msg"` | `bun run wspp 3 "msg"` | Send by position |
+| `wspp "+51987654321" "msg"` | `bun run wspp "+51..."` | Send by phone number |
+| `wspp 1,3,5 "msg"` | `bun run wspp 1,3,5 "msg"` | Bulk send by position |
+| `wspp --csv data/file.csv "msg"` | `bun run wspp --csv ...` | Bulk send from CSV |
+| `wspp --csv data/file.csv --dry-run "msg"` | — | Preview CSV send (no messages sent) |
+| `wspp 3 --file data/msg.txt` | — | Send from `.txt` file |
+| `wspp "Name" --doc archivo.pdf` | — | Send a document |
+| `wspp "Name" "Caption" --doc file.pdf` | — | Document with caption |
+| `wspp "Group" --poll "Q?" "a,b,c"` | — | Send poll (groups only) |
+| `wspp 3 --camera` | — | Camera photo (3s timer) |
+| `wspp 3 --camera --timer 5` | — | Camera with custom timer |
+| `wspp 3 "msg" --at 08:00` | — | Scheduled send |
+| `wspp-serve` | `bun run wspp:serve` | Start REST API server (open mode) |
+| `wspp-serve --port 3000 --key <key>` | `bun run wspp:serve --port 3000 --key <key>` | REST API server with auth |
 
 ## API Server Mode
 

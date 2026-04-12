@@ -2,9 +2,23 @@
   "name": "wspp-cli",
   "version": "1.0.0",
   "description": "WhatsApp Web CLI automation tool powered by Puppeteer + Bun",
-  "module": "index.ts",
   "type": "module",
-  "private": true,
+  "bin": {
+    "wspp": "bin/wspp",
+    "wspp-login": "bin/wspp-login",
+    "wspp-serve": "bin/wspp-serve",
+    "wspp-contacts": "bin/wspp-contacts"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE",
+    "tsconfig.json"
+  ],
+  "engines": {
+    "bun": ">=1.0.0"
+  },
   "scripts": {
     "wspp": "bun run src/commands/wspp.ts",
     "wspp:login": "bun run src/commands/wspp-login.ts",
@@ -13,6 +27,23 @@
     "wspp:debug-icons": "bun run src/commands/wspp-debug-icons.ts",
     "wspp:serve": "bun run src/commands/wspp-serve.ts"
   },
+  "keywords": [
+    "whatsapp",
+    "whatsapp-web",
+    "cli",
+    "automation",
+    "puppeteer",
+    "bulk-messaging",
+    "whatsapp-api",
+    "webhook",
+    "bun"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asther0/wspp-cli-puppeteer.git"
+  },
+  "homepage": "https://github.com/asther0/wspp-cli-puppeteer#readme",
+  "license": "MIT",
   "devDependencies": {
     "@types/bun": "latest"
   },
