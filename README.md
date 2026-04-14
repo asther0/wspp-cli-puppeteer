@@ -1,12 +1,20 @@
-# WSPP-CLI
+# wspp-cli
 
-WhatsApp Web automation from your terminal. Send messages, bulk send from CSV, schedule, and expose a REST API for webhooks — all powered by browser automation, no official API needed.
+[![npm version](https://img.shields.io/npm/v/wspp-cli)](https://www.npmjs.com/package/wspp-cli)
+[![npm downloads](https://img.shields.io/npm/dm/wspp-cli)](https://www.npmjs.com/package/wspp-cli)
+[![license](https://img.shields.io/npm/l/wspp-cli)](LICENSE)
+
+WhatsApp Web automation from your terminal. Send messages, bulk send from CSV, schedule, and expose a **REST API for webhooks** — all powered by browser automation, no official API needed.
 
 Built with Puppeteer + Bun. No tokens, no monthly fees — just your own WhatsApp number.
 
+📦 **[npmjs.com/package/wspp-cli](https://www.npmjs.com/package/wspp-cli)**
+
+---
+
 ## Install
 
-Requires [Bun](https://bun.sh) and Google Chrome.
+Requires [Bun](https://bun.sh) >= 1.0 and Google Chrome.
 
 ```bash
 # Install globally
@@ -19,7 +27,7 @@ bun install -g wspp-cli
 wspp-login
 ```
 
-After scanning the QR, the session is saved. All subsequent commands run silently in the background.
+After scanning the QR, the session is saved in `.wspp-session/`. All subsequent commands run silently in the background — no browser window visible.
 
 ### From source
 
@@ -30,32 +38,7 @@ bun install
 bun run wspp:login
 ```
 
-## Features
-
-- Send messages by name, position, or phone number
-- List and search contacts from recent chats
-- Interactive mode with arrow-key navigation
-- Bulk messaging to multiple contacts at once
-- CSV bulk send with `{{template}}` variables
-- Polls / surveys in group chats
-- Camera capture with countdown timer
-- Scheduled messages with real-time countdown
-- Anti-ban: random delays (3–7s) + volume warnings
-- Persistent session — scan QR once, reuse forever
-- Background mode — no visible browser window
-- **API server mode** — expose a REST API so n8n, Make, Zapier, or any script can send messages via HTTP
-
-## Requirements
-
-- [Bun](https://bun.sh) >= 1.0 — install with `curl -fsSL https://bun.sh/install | bash`
-- Google Chrome installed
-- Chrome path is auto-configured for Windows. For Mac/Linux, update `src/constants.ts`:
-  ```typescript
-  // Mac
-  export const CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  // Linux
-  export const CHROME_PATH = "/usr/bin/google-chrome";
-  ```
+---
 
 ## Quick Start
 
@@ -75,9 +58,39 @@ wspp 3 "Hello from CLI!"        # by position
 wspp "+51987654321" "Hello!"    # by phone
 ```
 
-After scanning the QR the first time, all subsequent commands run in the background — no browser window visible.
+---
 
-For CSV bulk sending, put your files in `data/` — see [`data/README.md`](data/README.md) for format details.
+## Features
+
+- Send messages by name, position, or phone number
+- List and search contacts from recent chats
+- Interactive mode with arrow-key navigation
+- Bulk messaging to multiple contacts at once
+- CSV bulk send with `{{template}}` variables
+- Polls / surveys in group chats
+- Camera capture with countdown timer
+- Document sending (PDF, DOCX, etc.)
+- Scheduled messages with real-time countdown
+- Anti-ban: random delays (3–7s) + volume warnings
+- Persistent session — scan QR once, reuse forever
+- Background mode — no visible browser window
+- **REST API server** — self-hosted WhatsApp provider for n8n, Make, Zapier, or any webhook
+
+---
+
+## Requirements
+
+- [Bun](https://bun.sh) >= 1.0 — install with `curl -fsSL https://bun.sh/install | bash`
+- Google Chrome installed
+- Chrome path is pre-configured for Windows. For Mac/Linux, update `src/constants.ts`:
+  ```typescript
+  // Mac
+  export const CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+  // Linux
+  export const CHROME_PATH = "/usr/bin/google-chrome";
+  ```
+
+---
 
 ## Use Cases
 
@@ -85,22 +98,26 @@ For CSV bulk sending, put your files in `data/` — see [`data/README.md`](data/
 
 ```bash
 # By contact name
-bun run wspp "Chema" "Hey, are we still on for tomorrow?"
+wspp "Carlos" "Hey, are we still on for tomorrow?"
 
-# By position number (from wspp:contacts list)
-bun run wspp 5 "On my way!"
+# By position number (from wspp-contacts list)
+wspp 5 "On my way!"
 
 # By phone number
-bun run wspp "+51999123456" "Hi, this is my new number"
+wspp "+51999123456" "Hi, this is my new number"
 ```
 
-### 2. Send the same message to multiple people
-
-Useful for announcements, reminders, or event invitations.
+### 2. Bulk send to multiple people
 
 ```bash
 # By positions (comma-separated)
-bun run wspp 1,3,5,7 "Reminder: meeting at 3pm"
+wspp 1,3,5,7 "Reminder: meeting at 3pm"
+
+# By name
+wspp "Juan,María,Pedro" "Team lunch at 1pm!"
+
+# By phone
+wspp "+51987654321,+56912345678" "Event confirmed for tomorrow"
 ```
 
 Shows progress for each contact and a summary at the end.
@@ -111,13 +128,13 @@ Load recipients from a CSV file and send personalized messages.
 
 ```bash
 # Preview what would be sent (no messages sent)
-bun run wspp --csv data/contacts.csv --dry-run "Hello {{name}}"
+wspp --csv data/contacts.csv --dry-run "Hello {{name}}"
 
 # Send for real
-bun run wspp --csv data/contacts.csv "Hello {{name}}, your code is {{code}}"
+wspp --csv data/contacts.csv "Hello {{name}}, your code is {{code}}"
 
 # CSV with per-row messages (no default template needed)
-bun run wspp --csv data/contacts.csv
+wspp --csv data/contacts.csv
 ```
 
 **CSV format:**
@@ -138,31 +155,25 @@ See [Anti-ban tips](#anti-ban-tips) before sending to large lists.
 
 ### 4. Send a document (PDF, DOCX, etc.)
 
-Attach and send any file to a contact or group. The file can optionally include a caption.
-
 ```bash
 # File in data/ folder (searched automatically)
-bun run wspp "Chema" --doc servicios.pdf
+wspp "Carlos" --doc servicios.pdf
 
 # File with caption
-bun run wspp "Chema" "Here's the proposal!" --doc propuesta.pdf
+wspp "Carlos" "Here's the proposal!" --doc propuesta.pdf
 
 # Full path
-bun run wspp "Team" --doc /Users/me/docs/report.pdf
+wspp "Team" --doc /Users/me/docs/report.pdf
 ```
-
-The browser opens in visible mode so the file chooser works. After the file uploads and the preview appears, the document is sent automatically.
 
 ### 5. Send a long message from a `.txt` file
 
-For multi-paragraph messages, templates, or content with line breaks — write it in a `.txt` file and reference it from the CLI.
-
 ```bash
-# File in data/ folder
-bun run wspp "Chema" --file data/mensaje.txt
+# Single contact
+wspp "Carlos" --file data/mensaje.txt
 
 # Combined with CSV bulk send (personalized template)
-bun run wspp --csv data/contactos.csv --file data/plantilla.txt
+wspp --csv data/contactos.csv --file data/plantilla.txt
 ```
 
 **`data/plantilla.txt`:**
@@ -175,66 +186,41 @@ Saludos,
 El equipo
 ```
 
-- Line breaks are preserved exactly as written
-- `{{name}}` and any CSV column can be used as template variables when combined with `--csv`
-- The entire `.txt` is sent as a **single message**
+Line breaks are preserved exactly as written.
 
-### 7. Schedule a message for later
-
-Send birthday wishes, reminders, or timed notifications.
+### 6. Schedule a message for later
 
 ```bash
 # Send at 8:00 AM
-bun run wspp 3 "Happy birthday!" --at 08:00
+wspp 3 "Happy birthday!" --at 08:00
 
-# If the time already passed today, it schedules for tomorrow
-bun run wspp "Team Lead" "Daily standup reminder" --at 09:00
+# Schedules for tomorrow if the time already passed today
+wspp "Team Lead" "Daily standup reminder" --at 09:00
 ```
 
 Shows a real-time countdown in the terminal until the message is sent.
 
-### 8. Send a poll (groups only)
-
-Create quick surveys in group chats.
+### 7. Send a poll (groups only)
 
 ```bash
-# Basic poll
-bun run wspp "Team Group" --poll "Lunch spot?" "Pizza,Sushi,Tacos"
-
-# More options
-bun run wspp "Friends" --poll "Movie night?" "Friday,Saturday,Sunday,Skip"
+wspp "Team Group" --poll "Lunch spot?" "Pizza,Sushi,Tacos"
+wspp "Friends" --poll "Movie night?" "Friday,Saturday,Sunday,Skip"
 ```
 
-Works in regular groups and community groups. Polls are not supported in individual chats.
-
-### 9. Take a photo with camera
-
-Capture and send a live photo directly from the CLI.
+### 8. Take a photo with camera
 
 ```bash
-# Default 3-second countdown
-bun run wspp "Chema" --camera
-
-# Custom timer (5 seconds)
-bun run wspp "Chema" --camera --timer 5
-
-# With caption
-bun run wspp "Chema" --camera --timer 3 "Live from the office!"
-
-# Instant capture (no countdown)
-bun run wspp "Chema" --camera --timer 0
+wspp "Carlos" --camera                      # 3s countdown
+wspp "Carlos" --camera --timer 5            # custom timer
+wspp "Carlos" --camera --timer 3 "Selfie!"  # with caption
+wspp "Carlos" --camera --timer 0            # instant capture
 ```
 
-Shows a visual countdown both in the terminal and on the browser page. Camera always opens in visible mode (not background).
-
-### 10. Browse and search contacts
+### 9. Browse and search contacts
 
 ```bash
-# List your 10 most recent chats
-bun run wspp:contacts
-
-# Search for a specific contact
-bun run wspp:contacts "Juan"
+wspp-contacts           # list 10 most recent
+wspp-contacts "Juan"    # search by name
 ```
 
 Output:
@@ -244,74 +230,33 @@ Output:
 ╠══════╬════════════════════════════╣
 ║ 1    ║ Team | 26 Labs             ║
 ║ 2    ║ Bloc USIL                  ║
-║ 3    ║ Chema                      ║
-║ ...  ║ ...                        ║
+║ 3    ║ Carlos                     ║
 ╚══════╩════════════════════════════╝
 ```
 
-### 11. Interactive mode (full menu)
-
-For when you want to browse, select, and send without memorizing commands.
+### 10. Interactive mode
 
 ```bash
-bun run wspp:i
+wspp-i   # (from source: bun run wspp:i)
 ```
 
-Features:
-- Arrow-key menu: Send / Bulk send / View contacts / Refresh / Exit
-- Contact selection with arrow keys
-- Message input inline
-- Confirmation before sending
-- Stays open for multiple actions
+Arrow-key menu: Send / Bulk send / View contacts / Refresh / Exit.
 
-### 12. First-time setup
-
-```bash
-bun run wspp:login
-```
-
-Opens a visible Chrome window. Scan the QR code with your phone. Session is saved automatically in `.wspp-session/` — you won't need to scan again.
-
-## All Commands
-
-Commands work both as global installs (`wspp ...`) and from source (`bun run wspp ...`).
-
-| Global install | From source | Description |
-|---|---|---|
-| `wspp-login` | `bun run wspp:login` | First-time QR login |
-| `wspp-contacts` | `bun run wspp:contacts` | List recent contacts |
-| `wspp-contacts "name"` | `bun run wspp:contacts "name"` | Search contacts |
-| `wspp "Name" "msg"` | `bun run wspp "Name" "msg"` | Send by name |
-| `wspp 3 "msg"` | `bun run wspp 3 "msg"` | Send by position |
-| `wspp "+51987654321" "msg"` | `bun run wspp "+51..."` | Send by phone number |
-| `wspp 1,3,5 "msg"` | `bun run wspp 1,3,5 "msg"` | Bulk send by position |
-| `wspp --csv data/file.csv "msg"` | `bun run wspp --csv ...` | Bulk send from CSV |
-| `wspp --csv data/file.csv --dry-run "msg"` | — | Preview CSV send (no messages sent) |
-| `wspp 3 --file data/msg.txt` | — | Send from `.txt` file |
-| `wspp "Name" --doc archivo.pdf` | — | Send a document |
-| `wspp "Name" "Caption" --doc file.pdf` | — | Document with caption |
-| `wspp "Group" --poll "Q?" "a,b,c"` | — | Send poll (groups only) |
-| `wspp 3 --camera` | — | Camera photo (3s timer) |
-| `wspp 3 --camera --timer 5` | — | Camera with custom timer |
-| `wspp 3 "msg" --at 08:00` | — | Scheduled send |
-| `wspp-serve` | `bun run wspp:serve` | Start REST API server (open mode) |
-| `wspp-serve --port 3000 --key <key>` | `bun run wspp:serve --port 3000 --key <key>` | REST API server with auth |
+---
 
 ## API Server Mode
 
-Turn wspp-cli into a self-hosted WhatsApp sending provider — like Twilio or Kapso, but free and using your own number.
-
-Start the server:
+Turn wspp-cli into a **self-hosted WhatsApp provider** — like Twilio or Kapso, but free and using your own number.
 
 ```bash
-# With API key (recommended)
-bun run wspp:serve --port 3000 --key my-secret-key
+# Start with API key (recommended)
+wspp-serve --port 3000 --key my-secret-key
 
 # Using environment variables
-WSPP_API_KEY=my-secret-key WSPP_PORT=3000 bun run wspp:serve
+WSPP_API_KEY=my-secret-key WSPP_PORT=3000 wspp-serve
 
 # Open mode (no auth — dev only)
-bun run wspp:serve
+wspp-serve
 ```
 
 The browser starts in the background and WhatsApp Web connects automatically using your saved session.
@@ -369,8 +314,7 @@ Response:
 #### `GET /contacts` — List recent contacts
 
 ```bash
-curl http://localhost:3000/contacts \
-  -H "X-API-Key: my-secret-key"
+curl http://localhost:3000/contacts -H "X-API-Key: my-secret-key"
 ```
 
 ---
@@ -404,11 +348,11 @@ Headers: X-API-Key = my-secret-key
 Body:    { "to": "{{ $json.phone }}", "message": "Hola {{ $json.name }}, bienvenido!" }
 ```
 
-Connect any trigger (Google Sheets, Typeform, Webhooks) to the HTTP Request node and messages fly automatically.
+Connect any trigger (Google Sheets, Typeform, Webhooks) to the HTTP Request node.
 
 #### Make (Integromat)
 
-Use the **HTTP → Make a request** module with the same config as above.
+Use **HTTP → Make a request** module with the same config as above.
 
 #### Google Sheets + Apps Script
 
@@ -446,12 +390,37 @@ npm run deploy && curl -s -X POST http://localhost:3000/send \
 
 ### Running on a VPS
 
-1. Login locally first: `bun run wspp:login` (saves `.wspp-session/`)
+1. Login locally first: `wspp-login` (saves `.wspp-session/`)
 2. Copy `.wspp-session/` to your VPS
-3. Start the server: `WSPP_API_KEY=my-key bun run wspp:serve --port 3000`
+3. Start the server: `WSPP_API_KEY=my-key wspp-serve --port 3000`
 4. Point n8n/Make to your VPS IP
 
 > **Note**: WhatsApp Web only supports one active session per account. The server and your phone can be active simultaneously, but two servers on the same account will conflict.
+
+---
+
+## All Commands
+
+| Global install | From source | Description |
+|---|---|---|
+| `wspp-login` | `bun run wspp:login` | First-time QR login |
+| `wspp-contacts` | `bun run wspp:contacts` | List recent contacts |
+| `wspp-contacts "name"` | `bun run wspp:contacts "name"` | Search contacts |
+| `wspp "Name" "msg"` | `bun run wspp "Name" "msg"` | Send by name |
+| `wspp 3 "msg"` | `bun run wspp 3 "msg"` | Send by position |
+| `wspp "+51..." "msg"` | `bun run wspp "+51..." "msg"` | Send by phone number |
+| `wspp 1,3,5 "msg"` | `bun run wspp 1,3,5 "msg"` | Bulk send by position |
+| `wspp --csv file.csv "msg"` | `bun run wspp --csv ...` | Bulk send from CSV |
+| `wspp --csv file.csv --dry-run "msg"` | — | Preview CSV send (no messages sent) |
+| `wspp 3 --file msg.txt` | — | Send from `.txt` file |
+| `wspp "Name" --doc file.pdf` | — | Send a document |
+| `wspp "Name" "Caption" --doc file.pdf` | — | Document with caption |
+| `wspp "Group" --poll "Q?" "a,b,c"` | — | Send poll (groups only) |
+| `wspp 3 --camera` | — | Camera photo (3s timer) |
+| `wspp 3 --camera --timer 5` | — | Camera with custom timer |
+| `wspp 3 "msg" --at 08:00` | — | Scheduled send |
+| `wspp-serve` | `bun run wspp:serve` | Start REST API server (open) |
+| `wspp-serve --port 3000 --key <key>` | `bun run wspp:serve --port 3000 --key <key>` | REST API server with auth |
 
 ---
 
@@ -463,30 +432,28 @@ npm run deploy && curl -s -X POST http://localhost:3000/send \
 4. **Contacts**: Extracts chat names from the WhatsApp sidebar DOM
 5. **Send**: Searches contact, selects chat, inserts text via CDP `Input.insertText` (syncs React state), clicks the real send button
 6. **Bulk**: Iterates contacts with random 3–7s delays (anti rate-limit)
-7. **CSV**: Parses `data/*.csv`, renders `{{templates}}`, sends via bulk pipeline; each contact navigated via `/send?phone=` with automatic `beforeunload` handling
-8. **File**: Reads `.txt` from `data/`, normalizes line endings, sends as a single message preserving all line breaks
-9. **Document**: Opens attach menu → Document → intercepts file chooser → uploads → sends with optional caption
+7. **CSV**: Parses CSV, renders `{{templates}}`, sends via bulk pipeline with `/send?phone=` navigation
+8. **Server**: Bun HTTP server keeps browser alive, processes requests sequentially through a queue
+9. **Document**: Opens attach menu → intercepts file chooser → uploads → sends with optional caption
 10. **Poll**: Opens attach menu → Poll → fills question/options → submits
 11. **Camera**: Opens attach menu → Camera → countdown timer → capture → send
 12. **Schedule**: Keeps browser open with countdown, sends at target time
 
+---
+
 ## Debugging
 
-If a message is failing silently, set `WSPP_DEBUG=1` to print step-by-step logs:
+Set `WSPP_DEBUG=1` to print step-by-step logs:
 
 ```bash
-WSPP_DEBUG=1 bun run wspp "Chema" --file data/mensaje.txt
+WSPP_DEBUG=1 wspp "Carlos" "test"
 ```
 
-Debug output includes:
-- Message length and line count
-- Which text insertion strategy was used (CDP / execCommand / keyboard)
-- The compose box `innerText` after insertion
-- Which send button selector matched
-- All `data-icon` values found on the last sent message
-- Time taken for send confirmation
+Debug output includes which text insertion strategy was used (CDP / execCommand / keyboard), compose box state, send button selector matched, and send confirmation timing.
 
-For navigation failures in CSV bulk sends, on timeout a screenshot is automatically saved as `wspp-debug-phone-<number>.png` in the project root.
+On navigation failures, a screenshot is saved as `wspp-debug-phone-<number>.png` in the current directory.
+
+---
 
 ## Configuration
 
@@ -494,9 +461,11 @@ Chrome path in `src/constants.ts`:
 
 ```typescript
 export const CHROME_PATH = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+// Mac: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+// Linux: "/usr/bin/google-chrome"
 ```
 
-For Mac: `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"`
+---
 
 ## Session Management
 
@@ -504,41 +473,42 @@ Session lives in `.wspp-session/` (gitignored). To reset:
 
 ```bash
 rm -rf .wspp-session
-bun run wspp:login
+wspp-login
 ```
+
+---
 
 ## Tech Stack
 
-- **Bun** — TypeScript runtime
-- **Puppeteer** — Chrome automation
-- **@inquirer/prompts** — Interactive menus
-- **Chalk + Ora** — Terminal styling
+- **[Bun](https://bun.sh)** — TypeScript runtime + HTTP server
+- **[Puppeteer](https://pptr.dev)** — Chrome automation
+- **[@inquirer/prompts](https://github.com/SBoudrias/Inquirer.js)** — Interactive menus
+- **[Chalk](https://github.com/chalk/chalk) + [Ora](https://github.com/sindresorhus/ora)** — Terminal styling
 
-## License
-
-MIT
+---
 
 ## Anti-ban Tips
 
-This tool automates a real Chrome browser via Puppeteer — WhatsApp sees the same fingerprint as a regular user. However, **no tool can guarantee your account won't be restricted**. Sending too many messages too fast is the #1 cause of bans.
+This tool automates a real Chrome browser — WhatsApp sees the same fingerprint as a regular user. However, **no tool can guarantee your account won't be restricted**. Sending too many messages too fast is the #1 cause of bans.
 
 ### Built-in protections
 
 - **Random delays (3–7s)** between each message in bulk/CSV mode
 - **Warning at 50+ messages** per session
 - **`--dry-run` flag** to verify your CSV before sending anything
+- **Invalid number detection** — auto-dismisses popups and cleans browser state
 
 ### Best practices
 
 | | Recommendation |
 |---|---|
-| **Volume** | Stay under 50 messages per session. For larger lists, split into batches with hours between them |
-| **Personalization** | Use `{{name}}` and other template variables — identical messages to many people trigger spam detection |
-| **Recipients** | Sending to contacts who already have you saved is much safer than cold-messaging new numbers |
+| **Volume** | Stay under 50 messages per session. Split larger lists with hours between batches |
+| **Personalization** | Use `{{name}}` and other template variables — identical messages trigger spam detection |
+| **Recipients** | Sending to contacts who have you saved is much safer than cold numbers |
 | **Account type** | WhatsApp Business accounts have higher tolerance than personal accounts |
 | **Timing** | Don't send at 3 AM — unusual hours draw attention |
 | **Frequency** | Avoid daily mass sends. Spread campaigns across days |
-| **Reports** | If even one recipient reports you as spam, it weighs heavily. Only message people who expect it |
+| **Reports** | If even one recipient reports you as spam, it weighs heavily |
 
 ### Risk levels
 
@@ -554,6 +524,14 @@ This tool automates a real Chrome browser via Puppeteer — WhatsApp sees the sa
 2. Wait the full restriction period (usually 24–48h)
 3. Reduce your volume by 50% when you resume
 4. Add more personalization to your messages
+
+---
+
+## License
+
+MIT
+
+---
 
 ## Disclaimer
 
