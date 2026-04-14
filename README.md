@@ -424,6 +424,16 @@ npm run deploy && curl -s -X POST http://localhost:3000/send \
 
 ---
 
+## Examples
+
+Real-world bots built on top of wspp-cli's API server:
+
+| Example | Description |
+|---|---|
+| [`examples/onpe-bot/`](examples/onpe-bot/) | 🗳 Bot de resultados electorales ONPE 2026 — envía actualizaciones en tiempo real a grupos de WhatsApp |
+
+---
+
 ## How It Works
 
 1. **Login**: Opens Chrome, navigates to WhatsApp Web, you scan QR

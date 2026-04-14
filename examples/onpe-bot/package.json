@@ -1,0 +1,11 @@
+{
+  "name": "onpe-bot",
+  "version": "1.0.0",
+  "description": "Bot de resultados electorales ONPE 2026 vía wspp-cli",
+  "type": "module",
+  "scripts": {
+    "start": "bun run bot.ts",
+    "dev": "bun --watch run bot.ts"
+  },
+  "dependencies": {}
+}
